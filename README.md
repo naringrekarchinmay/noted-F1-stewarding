@@ -25,6 +25,7 @@ uv run noted show 79                               # one parsed ruling, by datab
 uv run noted precedent --challenge                 # closest earlier rulings; the model re-ranks on-track ones (about 2 h)
 uv run noted replay                                # car positions from OpenF1 around each incident, cached
 uv run noted brief                                 # plain-English brief per ruling, linted against the source (about 1.5 h)
+uv run noted rules                                 # rulebooks in data/regs split into articles
 uv run noted site                                  # static site in data/site
 python3 -m http.server 4174 --directory ../data/site
 uv run pytest
@@ -36,7 +37,7 @@ Day 4 and 5: the site, in the "official notice board" direction (`PRODUCT.md`, `
 
 Day 6: briefs. The local model writes two or three sentences on what happened and why; a lint rejects any number, name or quote not in the document, any statement of the decision, verdict words and filler, and sends the problems back for a rewrite (four drafts at most). The decision and the comparison with the closest earlier rulings are composed in code. Briefs that never pass are not shown; power-unit and gearbox decisions get none. See `pipeline/eval/BRIEFS.md`.
 
-Day 6: rules. Article references in a 2026 ruling's Infringement field ("Article B1.8.5", "Appendix L, Chapter IV, Article 2 d)") link to the current FIA rulebook PDF (`pipeline/noted/rules.py`): Sporting Regulations Section B, issue 9, and ISC Appendix L 2026. Earlier seasons cite other rulebooks and are not linked.
+Day 6: rules. `uv run noted rules` splits the current rulebooks into articles (`pipeline/noted/rules.py`): Sporting Regulations Section B, issue 9 (379 articles), and Appendix L Chapter IV, the code of driving conduct, from the English column of the bilingual PDF. Put the two PDFs in `data/regs/` first; the URLs are in `rules.BOOKS`. The site gets a page per article group under `rules/`, listing the 2026 rulings that cite each article. In a 2026 ruling, an article reference in the Infringement field ("Article B1.8.5", "Appendix L, Chapter IV, Article 2 d)") links to its article, or to the FIA PDF if the rulebook is missing. Earlier seasons cite other rulebooks and are not linked. No redlines.
 
 Day 6: publish (planned, not deployed). `cloudflare/` holds a Pages Function for friends' steward-mode votes (`/api/votes`, D1), its schema and tests, and `DEPLOY.md`, the steps to follow once you have a free Cloudflare account. Build with `uv run noted site --votes` only for that deploy; without the flag, picks stay in each browser's localStorage.
 

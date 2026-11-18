@@ -428,6 +428,27 @@ def brief(
         typer.secho(f"{failed} rulings failed; run again to retry them.", fg="yellow")
 
 
+@app.command("rules")
+def rules_cmd() -> None:
+    """Split the current rulebooks (data/regs, downloaded by hand once) into articles."""
+    import pymupdf
+
+    from . import rules as rb
+
+    con = db.connect()
+    for book, meta in rb.BOOKS.items():
+        path = db.data_dir() / "regs" / meta["file"]
+        if not path.exists():
+            typer.secho(f"{book}: {path.name} is not in data/regs; its references will link to the PDF.", fg="yellow")
+            continue
+        with pymupdf.open(path) as doc:
+            width = doc[0].rect.width
+        articles = rb.split(book, rb.read_pdf(path), width)
+        rb.store(con, book, articles)
+        typer.echo(f"{book}: {len(articles)} articles")
+    con.close()
+
+
 @app.command()
 def replay(limit: int = typer.Option(0, min=0, help="Stop after trying this many rulings; 0 for all.")) -> None:
     """Fetch car positions from OpenF1 for on-track incidents since 2023 (data/replays)."""

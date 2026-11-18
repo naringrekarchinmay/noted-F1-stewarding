@@ -71,6 +71,15 @@ CREATE TABLE IF NOT EXISTS challenges (
     PRIMARY KEY (document_id, precedent_id, model)
 );
 
+CREATE TABLE IF NOT EXISTS articles (
+    book        TEXT    NOT NULL,  -- rules.BOOKS key: sporting | appendix_l
+    number      TEXT    NOT NULL,  -- "B1.6.3", or "IV.2" for Appendix L
+    title       TEXT    NOT NULL,
+    page        INTEGER NOT NULL,  -- page in the FIA PDF
+    paragraphs  TEXT    NOT NULL,  -- JSON: [indent level, text]
+    PRIMARY KEY (book, number)
+);
+
 CREATE TABLE IF NOT EXISTS briefs (
     document_id     INTEGER NOT NULL REFERENCES documents(id),
     model           TEXT    NOT NULL,

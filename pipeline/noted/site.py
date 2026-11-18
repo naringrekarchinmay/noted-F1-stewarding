@@ -157,8 +157,17 @@ def gather(con) -> dict:
         for c in named:
             if season and c.get("number") and c.get("name"):
                 drivers.setdefault((season, c["number"]), code(c["name"]))
+    books = rules.load_articles(con)
+    articles = {(book, a.number): f"{rule_page(book, a.number)}#{a.number}" for book, items in books.items() for a in items}
+    cited: dict[tuple[str, str], list[Incident]] = defaultdict(list)
+    for i in index.incidents:
+        if i.season == rules.SEASON:
+            text = ((fields.get(i.id, ({}, ""))[0].get("infringement") or {}).get("text", ""))
+            for key in dict.fromkeys(resolve(ref, articles) for ref in rules.references(text)):
+                if key:
+                    cited[key].append(i)
     return {"index": index, "fields": fields, "extractions": extractions, "precedents": precedents, "events": events,
-            "drivers": drivers, "briefs": briefs}
+            "drivers": drivers, "briefs": briefs, "books": books, "articles": articles, "cited": cited}
 
 
 def issued(fields: dict) -> str:
@@ -203,6 +212,8 @@ def index_page(data: dict) -> str:
     parts = ['<h1 class="title">Stewards’ decisions, explained</h1>',
              '<p class="lede">Every ruling quoted from the FIA document, with the earlier rulings most like it and whether they were punished the same.</p>',
              '<p class="record" data-record hidden></p>']
+    if data.get("books"):
+        parts.insert(2, '<p class="lede"><a href="rules/index.html">The 2026 rules</a>, article by article, with the rulings that cite each one.</p>')
     for season in sorted(by_season, reverse=True):
         events = sorted(by_season[season], key=lambda e: e["position"])
         rows = []
@@ -288,6 +299,26 @@ def scale(precedent_rows: list[tuple[Incident, str]], ruling: Incident) -> str:
             f'<span class="scale__dot scale__dot--this" style="--x:{x(ruling)}%">this</span></div>')
 
 
+def rule_page(book: str, number: str) -> str:
+    """Where an article lives: one page per second-level Sporting article (B1.6 holds B1.6.3), one page
+    for Appendix L Chapter IV. Top-level articles (B1) are headings on the rules index."""
+    if book == "appendix_l":
+        return "rules/appendix-l/chapter-iv.html"
+    if "." not in number:
+        return "rules/index.html"
+    return f"rules/sporting/{slug('.'.join(number.split('.')[:2]))}.html"
+
+
+def resolve(ref: "rules.Ref", articles: dict) -> tuple[str, str] | None:
+    """The article a reference points to, or its nearest parent the split found (B1.8.5 -> B1.8)."""
+    parts = ref.article.split(".")
+    for n in range(len(parts), 0, -1):
+        key = (ref.book, ".".join(parts[:n]))
+        if key in articles:
+            return key
+    return None
+
+
 def linked_rules(text: str, season: int, articles: dict[tuple[str, str], str], up: str = "../") -> str:
     """Escaped Infringement text with each article of the current rulebooks linked: to its page on this
     site when the rulebook was split into articles, otherwise to the FIA PDF."""
@@ -295,7 +326,8 @@ def linked_rules(text: str, season: int, articles: dict[tuple[str, str], str], u
         return escape(text)
     out, pos = [], 0
     for ref in rules.references(text):
-        page = articles.get((ref.book, ref.article))
+        key = resolve(ref, articles)
+        page = articles.get(key) if key else None
         href = f"{up}{page}" if page else rules.BOOKS[ref.book]["url"]
         title = f"{rules.BOOKS[ref.book]['short']}, Article {ref.article}" if page else f"{rules.BOOKS[ref.book]['title']} (PDF)"
         out.append(escape(text[pos:ref.start]))
@@ -429,6 +461,91 @@ def ruling_page(i: Incident, data: dict, replay: dict | None) -> str:
     return page(f"{subject(i.title)} – {name} {event['season']}", body, 1, crumbs)
 
 
+def cited_list(incidents: list[Incident], data: dict, up: str) -> str:
+    if not incidents:
+        return ""
+    rows = []
+    for i in sorted(incidents, key=lambda i: i.published_at, reverse=True):
+        e = data["events"][i.event_id]
+        doc = re.match(r"Doc (\d+)", i.title)
+        where = " · ".join(x for x in (name_of(e), f"Doc {doc.group(1)}" if doc else "") if x)
+        rows.append(f'<li><a class="cited__row" href="{up}r/{i.id}.html"><span class="cited__where">{escape(where)}</span>'
+                    f'<span class="cited__subject">{escape(subject(i.title))}</span>{stamp(i)}</a></li>')
+    n = len(incidents)
+    return (f'<div class="cited"><h3 class="cited__head">Cited in {n} ruling{"s" if n != 1 else ""} this season</h3>'
+            f'<ul class="precs">{"".join(rows)}</ul></div>')
+
+
+def clause(book: str, a: "rules.Article", data: dict, up: str, heading: bool = True) -> str:
+    paras = "".join(f'<p class="clause__p clause__p--{level}">{escape(text)}</p>' for level, text in a.paragraphs)
+    head = (f'<h2 class="clause__head"><a class="clause__no num" href="#{a.number}">{escape(a.number)}</a>'
+            f'{" " + escape(a.title) if a.title else ""}</h2>') if heading else ""
+    return (f'<section class="clause" id="{a.number}">{head}{paras}'
+            f'{cited_list(data["cited"].get((book, a.number), []), data, up)}</section>')
+
+
+def book_page(book: str, title: str, number: str, items: list, data: dict, crumbs: str) -> str:
+    meta = rules.BOOKS[book]
+    first = items[0]
+    body = (f'<article class="ruling rulebook"><h1 class="title title--ruling">'
+            f'<span class="num rulebook__no">{escape(number)}</span> {escape(title)}</h1>'
+            f'<p class="ruling__meta">{escape(meta["short"])} · {escape(meta["issue"])} · PDF page {first.page}</p>'
+            + "".join(clause(book, a, data, "../../", heading=a.number != number) for a in items)
+            + '<p class="note">Split automatically from the FIA’s PDF, so layout and numbering of points may differ; '
+              'the PDF is the authority.</p>'
+            f'<p class="source"><a href="{escape(meta["url"])}#page={first.page}">{escape(number)} in the FIA PDF</a></p>'
+            '</article>')
+    return page(f"{number} {title} – {meta['short']}", body, 2, crumbs)
+
+
+def rules_pages(data: dict) -> dict[str, str]:
+    """The rules index and one page per article group, keyed by their path under the site."""
+    out: dict[str, str] = {}
+    books = data["books"]
+    crumbs = '<a href="../index.html">Rules</a>'
+    sections = []
+    sporting = books.get("sporting", [])
+    groups: dict[str, list] = defaultdict(list)
+    for a in sporting:
+        if "." in a.number:
+            groups[".".join(a.number.split(".")[:2])].append(a)
+    def count(book: str, items: list) -> int:
+        return len({i.id for a in items for i in data["cited"].get((book, a.number), [])})
+    for top in (a for a in sporting if "." not in a.number):
+        rows = []
+        for key in (k for k in groups if k.split(".")[0] == top.number):
+            items = groups[key]
+            head = next(a for a in items if a.number == key)
+            n = count("sporting", items)
+            rows.append(f'<li><a class="event" href="sporting/{slug(key)}.html"><span class="num event__no">{escape(key)}</span>'
+                        f'<span class="event__name">{escape(head.title)}</span><span class="num">{n or ""}</span></a></li>')
+            out[rule_page("sporting", key)] = book_page("sporting", head.title, key, items, data, crumbs)
+        sections.append(f'<section class="season" id="{top.number}"><h2 class="board__head">{escape(top.number)} · {escape(top.title)}'
+                        f'<span class="board__cols" aria-hidden="true"><span>cited</span></span></h2><ul class="events">{"".join(rows)}</ul></section>')
+    chapter = books.get("appendix_l", [])
+    if chapter:
+        rows = "".join(
+            f'<li><a class="event" href="appendix-l/chapter-iv.html#{a.number}"><span class="num event__no">{escape(a.number)}</span>'
+            f'<span class="event__name">{escape(a.title)}</span><span class="num">{count("appendix_l", [a]) or ""}</span></a></li>'
+            for a in chapter)
+        sections.append('<section class="season" id="appendix-l"><h2 class="board__head">Appendix L · Chapter IV · Driving conduct on circuits'
+                        f'<span class="board__cols" aria-hidden="true"><span>cited</span></span></h2><ul class="events">{rows}</ul></section>')
+        body = (f'<article class="ruling rulebook"><h1 class="title title--ruling">Code of driving conduct on circuits</h1>'
+                f'<p class="ruling__meta">Appendix L · Chapter IV · {escape(rules.BOOKS["appendix_l"]["issue"])} · PDF page {chapter[0].page}</p>'
+                + "".join(clause("appendix_l", a, data, "../../") for a in chapter)
+                + '<p class="note">Split automatically from the English column of the FIA’s bilingual PDF; the PDF is the authority.</p>'
+                f'<p class="source"><a href="{escape(rules.BOOKS["appendix_l"]["url"])}#page={chapter[0].page}">Chapter IV in the FIA PDF</a></p>'
+                '</article>')
+        out[rule_page("appendix_l", "IV")] = page("Appendix L, Chapter IV – Driving conduct", body, 2, crumbs)
+    books_line = " and ".join(
+        f'<a href="{escape(m["url"])}">{escape(m["title"])}</a> ({escape(m["issue"])})' for k, m in rules.BOOKS.items() if books.get(k))
+    out["rules/index.html"] = page("The rules", (
+        '<h1 class="title">The 2026 rules</h1>'
+        f'<p class="lede">The articles the stewards cite, from the {books_line}. '
+        'Each article lists the rulings this season that cite it.</p>' + "".join(sections)), 1)
+    return out
+
+
 def build(out: Path | None = None, votes: str = "") -> Path:
     """votes: the endpoint for friends' steward-mode votes (Cloudflare, see cloudflare/DEPLOY.md);
     empty until it is deployed, so picks stay in each reader's browser."""
@@ -443,6 +560,9 @@ def build(out: Path | None = None, votes: str = "") -> Path:
     (out / "r").mkdir()
     shutil.copytree(ASSETS, out / "assets")
     (out / "index.html").write_text(index_page(data))
+    for path, html in rules_pages(data).items():
+        (out / path).parent.mkdir(parents=True, exist_ok=True)
+        (out / path).write_text(html)
     for e in data["events"].values():
         if any(i.event_id == e["id"] for i in data["index"].incidents):
             (out / "e" / f"{e['id']}.html").write_text(event_page(e, data))
