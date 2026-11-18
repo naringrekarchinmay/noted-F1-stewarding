@@ -49,3 +49,52 @@ def test_car_codes_adds_cars_named_in_the_fact_and_looks_up_their_codes():
               "fact": {"text": "Car 63 appeared to force Car 16 off the Track at Turn 18"}}
     assert car_codes(i, fields, {(2026, 16): "LEC"}) == [(63, "RUS"), (16, "LEC")]
     assert chip(16, "LEC") == '<span class="car"><em>16</em>LEC</span>'
+
+
+def _brief_data(brief_hash=None):
+    from noted import explain
+    from noted.precedent import Incident
+
+    i = Incident(id=7, event_id=1, event="x", season=2026, published_at="", title="Doc 9 - Infringement - Car 16",
+                 url="", type="collision", group="collision", session="race", cars={16}, outcome="penalty",
+                 penalties=[{"kind": "time", "value": 5.0}], factors=set(), text="", names=set())
+    p = Incident(id=3, event_id=1, event="x", season=2025, published_at="", title="", url="", type="collision",
+                 group="collision", session="race", cars={1}, outcome="penalty", penalties=[], factors=set(),
+                 text="", names=set())
+    fields = {"form": {"text": "ruling"}, "fact": {"text": "Car 16 made contact with Car 30 at turn 12 on the first lap after braking late."}}
+    model_input = explain.brief_input(i.title, fields, "", [])
+
+    class Index:
+        by_id = {3: p}
+
+    return i, {"briefs": {7: ("Car 16 made contact with Car 30 at turn 12 on the first lap after braking late.", brief_hash or explain.input_hash(model_input))},
+               "fields": {7: (fields, "")}, "extractions": {}, "precedents": {7: [(3, "lighter")]}, "index": Index()}
+
+
+def test_brief_block_adds_the_computed_sentences_and_stays_hidden_until_the_reveal():
+    from noted.site import brief_block
+
+    i, data = _brief_data()
+    html = brief_block(i, data)
+    assert 'class="field brief field--hidden" data-field="brief"' in html
+    assert 'Car <span class="num">16</span> made contact' in html
+    assert "The stewards imposed a <span class=\"num\">5</span>-second time penalty." in html
+    assert "The closest earlier ruling got a lighter penalty." in html
+
+
+def test_a_cached_brief_that_fails_the_current_lint_is_not_shown():
+    from noted.site import brief_block
+
+    i, data = _brief_data()
+    data["briefs"][7] = ("Car 16 made contact with Car 30 at turn 12 on the first lap and was given a caution.", data["briefs"][7][1])
+    assert brief_block(i, data) == ""
+
+
+def test_a_brief_written_from_an_older_version_of_the_document_is_not_shown():
+    from noted.site import brief_block
+
+    i, data = _brief_data(brief_hash="stale")
+    assert brief_block(i, data) == ""
+    data["briefs"] = {}
+    assert brief_block(i, data) == ""
+

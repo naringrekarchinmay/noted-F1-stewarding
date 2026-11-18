@@ -70,6 +70,21 @@ CREATE TABLE IF NOT EXISTS challenges (
     difference    TEXT,              -- the model's note; not checked against the source, so not shown
     PRIMARY KEY (document_id, precedent_id, model)
 );
+
+CREATE TABLE IF NOT EXISTS briefs (
+    document_id     INTEGER NOT NULL REFERENCES documents(id),
+    model           TEXT    NOT NULL,
+    prompt_version  INTEGER NOT NULL,
+    input_hash      TEXT    NOT NULL,  -- of the model's input; a changed document or extraction redoes the brief
+    status          TEXT    NOT NULL,  -- ok | rejected (failed the lint after every rewrite; never shown)
+    brief           TEXT    NOT NULL,  -- the last draft: what happened and why, in the model's words
+    problems        TEXT,              -- JSON: the lint's problems with each draft, in order
+    attempts        INTEGER NOT NULL,
+    raw             TEXT,              -- JSON: each reply as received
+    seconds         REAL,
+    created_at      TEXT    NOT NULL,
+    PRIMARY KEY (document_id, model, prompt_version)
+);
 """
 
 

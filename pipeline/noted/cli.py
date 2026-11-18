@@ -353,6 +353,82 @@ def precedent(
 
 
 @app.command()
+def brief(
+    limit: int = typer.Option(0, min=0, help="Stop after writing this many briefs; 0 for all."),
+    only: list[int] = typer.Option([], help="Only these document ids."),
+    force: bool = typer.Option(False, help="Rewrite briefs that are already cached for the same input."),
+) -> None:
+    """Write each ruling's plain-English brief with the local model, lint it, and cache it.
+
+    Resumable: a ruling whose cached brief was made from the same input is skipped.
+    Newest season first, so the current one is covered before the backfill finishes.
+    """
+    import httpx
+
+    from . import explain
+    from .extract import PROMPT_VERSION, ModelError, unload
+    from .rulebased import incident_from_title
+
+    con = db.connect()
+    rows = con.execute(
+        "SELECT d.id, d.title, r.text, r.fields, x.result FROM extractions x "
+        "JOIN documents d ON d.id = x.document_id JOIN events e ON e.id = d.event_id "
+        "JOIN rulings r ON r.document_id = d.id WHERE x.model = ? AND x.prompt_version = ? "
+        "ORDER BY e.season DESC, e.position, d.id",
+        (explain.MODEL, PROMPT_VERSION),
+    ).fetchall()
+    if only:
+        rows = [r for r in rows if r["id"] in set(only)]
+    cached = {
+        r["document_id"]: r["input_hash"] for r in con.execute(
+            "SELECT document_id, input_hash FROM briefs WHERE model = ? AND prompt_version = ?",
+            (explain.MODEL, explain.PROMPT_VERSION))
+    }
+    todo = []
+    for r in rows:
+        fields, result = json.loads(r["fields"] or "{}"), json.loads(r["result"])
+        if (incident_from_title(r["title"]) or result.get("incident_type")) in explain.SKIP_TYPES:
+            continue
+        quotes = [f["quote"] for f in result.get("factors") or []]
+        model_input = explain.brief_input(r["title"], fields, r["text"] or "", quotes)
+        digest = explain.input_hash(model_input)
+        if force or cached.get(r["id"]) != digest:
+            todo.append((r["id"], model_input, digest))
+    if limit:
+        todo = todo[:limit]
+    typer.echo(f"{explain.MODEL}: {len(todo)} of {len(rows)} briefs to write")
+    client = httpx.Client(timeout=600)
+    chat = explain.ollama_chat(client)
+    counts = {"ok": 0, "rejected": 0}
+    failed = 0
+    try:
+        for n, (doc_id, model_input, digest) in enumerate(todo, 1):
+            try:
+                out = explain.write(model_input, chat)
+            except (ModelError, httpx.HTTPError) as exc:
+                failed += 1
+                typer.secho(f"  {doc_id}: {exc}", fg="yellow")
+                continue
+            counts[out.status] += 1
+            typer.echo(f"  [{n}/{len(todo)}] {doc_id}: {out.status} after {out.attempts}, {out.seconds:.1f}s")
+            con.execute(
+                "INSERT OR REPLACE INTO briefs (document_id, model, prompt_version, input_hash, status, brief, "
+                "problems, attempts, raw, seconds, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (doc_id, explain.MODEL, explain.PROMPT_VERSION, digest, out.status, out.text,
+                 json.dumps(out.problems, ensure_ascii=False), out.attempts, json.dumps(out.raw, ensure_ascii=False),
+                 out.seconds, datetime.now(timezone.utc).isoformat(timespec="seconds")),
+            )
+            con.commit()
+    finally:
+        client.close()
+        con.close()
+        unload(explain.MODEL)
+    typer.echo(f"{counts['ok']} passed the lint, {counts['rejected']} rejected after {explain.MAX_ATTEMPTS} drafts.")
+    if failed:
+        typer.secho(f"{failed} rulings failed; run again to retry them.", fg="yellow")
+
+
+@app.command()
 def replay(limit: int = typer.Option(0, min=0, help="Stop after trying this many rulings; 0 for all.")) -> None:
     """Fetch car positions from OpenF1 for on-track incidents since 2023 (data/replays)."""
     from . import replay as rp

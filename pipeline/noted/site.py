@@ -16,7 +16,7 @@ from collections import defaultdict
 from html import escape
 from pathlib import Path
 
-from . import db
+from . import db, explain
 from .precedent import Index, Incident, _weight, describe, load, main_penalty
 
 ASSETS = Path(__file__).with_name("site_assets")
@@ -144,6 +144,11 @@ def gather(con) -> dict:
     events = {
         r["id"]: dict(r) for r in con.execute("SELECT id, season, name, position FROM events")
     }
+    briefs = {
+        r["document_id"]: (r["brief"], r["input_hash"]) for r in con.execute(
+            "SELECT document_id, brief, input_hash FROM briefs WHERE status = 'ok' AND model = ? AND prompt_version = ?",
+            (explain.MODEL, explain.PROMPT_VERSION))
+    }
     season_of = {i.id: i.season for i in index.incidents}
     drivers: dict[tuple[int, int], str] = {}  # (season, car number) -> driver code, for cars named only by number
     for doc_id, (f, _) in fields.items():
@@ -153,7 +158,7 @@ def gather(con) -> dict:
             if season and c.get("number") and c.get("name"):
                 drivers.setdefault((season, c["number"]), code(c["name"]))
     return {"index": index, "fields": fields, "extractions": extractions, "precedents": precedents, "events": events,
-            "drivers": drivers}
+            "drivers": drivers, "briefs": briefs}
 
 
 def issued(fields: dict) -> str:
@@ -283,6 +288,34 @@ def scale(precedent_rows: list[tuple[Incident, str]], ruling: Incident) -> str:
             f'<span class="scale__dot scale__dot--this" style="--x:{x(ruling)}%">this</span></div>')
 
 
+def numbered(text: str) -> str:
+    """Escaped text with every number in the number face."""
+    return re.sub(r"\d[\d,.]*\d|\d", lambda m: f'<span class="num">{m.group(0)}</span>', escape(text))
+
+
+def brief_block(i: Incident, data: dict) -> str:
+    """The machine-written brief, only if it passes the lint and was written from the document as it is now."""
+    cached = data["briefs"].get(i.id)
+    if not cached:
+        return ""
+    f, text = data["fields"][i.id]
+    quotes = [x["quote"] for x in data["extractions"].get(i.id, {}).get("factors") or []]
+    model_input = explain.brief_input(i.title, f, text, quotes)
+    # Linted again here, so a rule added to the lint applies to briefs already cached.
+    if explain.input_hash(model_input) != cached[1] or explain.lint(cached[0], model_input):
+        return ""
+    comparisons = [cmp for p, cmp in data["precedents"].get(i.id, []) if p in data["index"].by_id]
+    written = numbered(cached[0])
+    computed = numbered(" ".join(x for x in (explain.decision_sentence(i.outcome, *main_penalty(i)),
+                                            explain.precedent_sentence(comparisons)) if x))
+    return (f'<section class="field brief field--hidden" data-field="brief"><h2 class="field__label">In brief</h2>'
+            f'<p class="field__text brief__text">{written} <span class="brief__computed">{computed}</span></p>'
+            '<p class="note">Written by a local model from the stewards’ text below, then checked against it: '
+            'every name, number and quote must appear there. The decision and the comparison are computed, not written. '
+            'A hand check of 20 found one that gave a reason the stewards did not.</p>'
+            '</section>')
+
+
 def ruling_page(i: Incident, data: dict, replay: dict | None) -> str:
     f, text = data["fields"][i.id]
     event = data["events"][i.event_id]
@@ -358,6 +391,7 @@ def ruling_page(i: Incident, data: dict, replay: dict | None) -> str:
   <p class="ruling__cars">{cars}<span class="ruling__meta">{escape(meta)}</span></p>
   <div class="verdict field--hidden" data-field="verdict">{stamp(i)}<span class="verdict__full">{escape(describe(*main_penalty(i)).capitalize())}</span></div>
   {steward}
+  {brief_block(i, data)}
   {facts}
   {replay_html}
   {answer}
