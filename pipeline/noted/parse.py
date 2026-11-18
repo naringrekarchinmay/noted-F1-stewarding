@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pymupdf
 
-PARSER_VERSION = 2  # 2: accepts the misspelt "Infringment" label
+PARSER_VERSION = 3  # 2: misspelt "Infringment" label; 3: "Reasons" label, cars from a Fact table
 
 PAGE_BREAK = "\f"
 
@@ -40,6 +40,7 @@ BODY_LABELS = (
     ("infringement", "Offence"),  # the word used before 2023
     ("infringement", "Infringment"),  # the FIA's own misspelling, mid-2023 template
     ("decision", "Decision"),
+    ("reason", "Reasons"),  # SC2-SC1 time decisions; listed first so "Reasons" in a reason's text never matches
     ("reason", "Reason"),
 )
 # Labels that may share a line with their value ("Infringement Breach of ...").
@@ -56,6 +57,13 @@ _DOC_REFS = re.compile(r"documents?\s+((?:\d+)(?:\s*(?:,|&|and)\s*\d+)*)", re.I)
 
 # A ruling can concern a team or a whole table of drivers, so the driver is not required.
 RULING_FIELDS = ("fact", "infringement", "decision", "reason")
+_NAME_CELL = re.compile(r"[A-ZÀ-Þ](?!.*\d:\d\d)")  # starts like a name and holds no time of day
+# Words that open a team name, for a merged "Driver Team" cell whose team appears nowhere else.
+_TEAM_START = re.compile(
+    r"\s(?=(?:Mercedes|McLaren|Scuderia|Oracle|Red Bull|Aston Martin|Atlassian|Williams|BWT|Alpine"
+    r"|MoneyGram|Haas|Stake|Kick|Sauber|Audi|Cadillac|Visa|Alfa|AlphaTauri|Alpha|Racing Bulls|Uralkali|Renault)\b)"
+)
+_COLUMN = re.compile(r"\b(No\.?|Turn|Car|Driver|Competitor|Time of Day|Lap Time|Lap)(?=\s|$)")
 _EVENT_LINE = re.compile(r"^\d{4}\b.*\b(GRAND PRIX|TESTS?)\b", re.I)
 
 
@@ -239,6 +247,58 @@ def _drop_trailing_names(fields: dict[str, dict], text: str, stewards: list[_Lin
             value["end"] = value["start"] + len(raw)
 
 
+def _table_cars(rows: list[str]) -> list[dict]:
+    """Cars listed in a Fact table ("No. / Car / Driver / Competitor / ..."), one cell per line.
+
+    The header may put several column names on one line ("No Car Driver"), and some
+    tables have extra columns (a Turn before the Car), so the columns are read from
+    the header. Each row starts with its running number, 1, 2, 3...
+    """
+    start = next((i for i, r in enumerate(rows) if re.match(r"No\.?(\s|$)", r)), None)
+    if start is None:
+        return []
+    columns: list[str] = []
+    k = start
+    while k < len(rows) and rows[k] != "1":
+        names = _COLUMN.findall(rows[k])
+        if not names or _COLUMN.sub("", rows[k]).strip():
+            return []  # not a header line after all
+        columns.extend(n.rstrip(".") for n in names)
+        k += 1
+    if "Car" not in columns or "Driver" not in columns:
+        return []
+    car, driver = columns.index("Car"), columns.index("Driver")
+    # Cells after the driver sometimes merge in the PDF text ("Gabriel Bortoleto Audi
+    # Revolut F1 Team" on one line), so rows are found by their running number rather
+    # than by stepping a fixed width. The cells up to the driver are short and never merge.
+    team = columns.index("Competitor") if "Competitor" in columns else None
+    cars: list[dict] = []
+    teams: set[str] = set()
+    # A second table can restart the numbering (Q1 then Q2), and the PDF text now and
+    # then loses a row number, so the next row may be numbered 1, n or n + 1.
+    expected = 1
+    while k + driver < len(rows):
+        number = rows[k]
+        if (
+            number in (str(expected), str(expected + 1), "1")
+            and re.fullmatch(r"\d{1,2}", rows[k + car])
+            and _NAME_CELL.match(rows[k + driver])
+        ):
+            cars.append({"number": int(rows[k + car]), "name": rows[k + driver]})
+            if team is not None and team == driver + 1 and k + team < len(rows):
+                teams.add(rows[k + team])
+            expected = int(number) + 1
+            k += driver + 1
+        else:
+            k += 1
+    for entry in cars:  # trim a team name that merged into the driver's cell
+        for name in teams:
+            if entry["name"].endswith(" " + name):
+                entry["name"] = entry["name"][: -len(name) - 1]
+        entry["name"] = _TEAM_START.split(entry["name"], 1)[0].strip()
+    return cars
+
+
 def _derive(fields: dict[str, dict], lines: list[_Line]) -> None:
     """Small structured values read straight off the form."""
     # The event name heads the page, but cover sheets print the header block first.
@@ -257,6 +317,11 @@ def _derive(fields: dict[str, dict], lines: list[_Line]) -> None:
         team = [part for part in to["raw"].split("\n") if not part.lower().startswith("the team manager")]
         if team:
             to["team"] = " ".join(team)
+    fact = fields.get("fact")
+    if fact:
+        cars = _table_cars(fact["raw"].split("\n"))
+        if cars:
+            fact["cars"] = cars
     preamble = fields.get("preamble")
     if preamble:
         refs: list[int] = []
