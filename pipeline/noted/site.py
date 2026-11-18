@@ -461,7 +461,7 @@ def ruling_page(i: Incident, data: dict, replay: dict | None) -> str:
     return page(f"{subject(i.title)} – {name} {event['season']}", body, 1, crumbs)
 
 
-def cited_list(incidents: list[Incident], data: dict, up: str) -> str:
+def cited_list(incidents: list[Incident], data: dict, up: str, level: int = 3) -> str:
     if not incidents:
         return ""
     rows = []
@@ -472,7 +472,7 @@ def cited_list(incidents: list[Incident], data: dict, up: str) -> str:
         rows.append(f'<li><a class="cited__row" href="{up}r/{i.id}.html"><span class="cited__where">{escape(where)}</span>'
                     f'<span class="cited__subject">{escape(subject(i.title))}</span>{stamp(i)}</a></li>')
     n = len(incidents)
-    return (f'<div class="cited"><h3 class="cited__head">Cited in {n} ruling{"s" if n != 1 else ""} this season</h3>'
+    return (f'<div class="cited"><h{level} class="cited__head">Cited in {n} ruling{"s" if n != 1 else ""} this season</h{level}>'
             f'<ul class="precs">{"".join(rows)}</ul></div>')
 
 
@@ -481,7 +481,7 @@ def clause(book: str, a: "rules.Article", data: dict, up: str, heading: bool = T
     head = (f'<h2 class="clause__head"><a class="clause__no num" href="#{a.number}">{escape(a.number)}</a>'
             f'{" " + escape(a.title) if a.title else ""}</h2>') if heading else ""
     return (f'<section class="clause" id="{a.number}">{head}{paras}'
-            f'{cited_list(data["cited"].get((book, a.number), []), data, up)}</section>')
+            f'{cited_list(data["cited"].get((book, a.number), []), data, up, 3 if heading else 2)}</section>')
 
 
 def book_page(book: str, title: str, number: str, items: list, data: dict, crumbs: str) -> str:
