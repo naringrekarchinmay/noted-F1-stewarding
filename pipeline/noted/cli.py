@@ -282,6 +282,88 @@ def score(
         typer.echo(f"{k:<{width}}  " + "  ".join(f"{str(table[n][k]):>14}" for n in names))
 
 
+@app.command()
+def precedent(
+    top: int = typer.Option(5, min=1, help="Precedents to keep per ruling."),
+    challenge: bool = typer.Option(False, help="Have the local model re-rank on-track incidents (slow; resumable)."),
+) -> None:
+    """Rank earlier rulings on the same kind of incident and compare their penalties.
+
+    With --challenge, the model rates each of the top TF-IDF candidates for on-track
+    incidents and those are re-ranked by its score. Ratings are cached in the
+    challenges table, so a stopped run carries on; without --challenge, cached
+    ratings are still used.
+    """
+    from collections import Counter
+
+    import httpx
+
+    from . import precedent as prec
+
+    con = db.connect()
+    index = prec.Index(prec.load(con))
+    cached = {
+        (r["document_id"], r["precedent_id"]): r["score"]
+        for r in con.execute("SELECT document_id, precedent_id, score FROM challenges WHERE model = ?", (prec.MODEL,))
+    }
+    client = httpx.Client(timeout=600) if challenge else None
+    todo = [q for q in index.incidents if q.group in prec.ON_TRACK]
+    if challenge:
+        typer.echo(f"Challenging the top {prec.CHALLENGE_POOL} for {len(todo)} on-track rulings")
+        try:
+            for n, q in enumerate(todo, 1):
+                for _, c in index.rank(q, prec.CHALLENGE_POOL):
+                    if (q.id, c.id) in cached:
+                        continue
+                    score, difference = prec.challenge(q, c, client)
+                    cached[(q.id, c.id)] = score
+                    con.execute(
+                        "INSERT OR REPLACE INTO challenges (document_id, precedent_id, model, score, difference) "
+                        "VALUES (?, ?, ?, ?, ?)", (q.id, c.id, prec.MODEL, score, difference),
+                    )
+                con.commit()
+                if n % 25 == 0:
+                    typer.echo(f"  {n}/{len(todo)}")
+        finally:
+            client.close()
+            from .extract import unload
+            unload(prec.MODEL)
+
+    counts: Counter[str] = Counter()
+    with_any = 0
+    con.execute("DELETE FROM precedents")
+    for q in index.incidents:
+        ranked = index.rank(q, max(top, prec.CHALLENGE_POOL) if q.group in prec.ON_TRACK else top)
+        if q.group in prec.ON_TRACK and all((q.id, c.id) in cached for _, c in ranked):
+            ranked.sort(key=lambda sc: (-cached[(q.id, sc[1].id)], -sc[0]))
+        ranked = ranked[:top]
+        with_any += bool(ranked)
+        for rank, (score, c) in enumerate(ranked, 1):
+            comparison = prec.compare(q, c)
+            if rank <= 3:
+                counts[comparison] += 1
+            con.execute(
+                "INSERT INTO precedents (document_id, rank, precedent_id, score, comparison) VALUES (?, ?, ?, ?, ?)",
+                (q.id, rank, c.id, round(score, 4), comparison),
+            )
+    con.commit()
+    con.close()
+    typer.echo(f"{with_any} of {len(index.incidents)} rulings have at least one precedent.")
+    typer.echo("Top three, precedent's penalty against the ruling's: " + ", ".join(f"{n} {k}" for k, n in counts.most_common()))
+
+
+@app.command()
+def replay(limit: int = typer.Option(0, min=0, help="Stop after trying this many rulings; 0 for all.")) -> None:
+    """Fetch car positions from OpenF1 for on-track incidents since 2023 (data/replays)."""
+    from . import replay as rp
+
+    con = db.connect()
+    try:
+        rp.run(con, limit=limit or None)
+    finally:
+        con.close()
+
+
 @app.command("gold-sheet")
 def gold_sheet() -> None:
     """Write eval/GOLD.md: each gold ruling's decision and reasons beside its labels, for checking by hand."""

@@ -109,8 +109,8 @@ _TITLE_TYPES: tuple[tuple[str, str], ...] = (
     (r"multiple times|track limits", "track_limits"),
     (r"leaving the track|left the track", "leaving_track_advantage"),
     (r"imped", "impeding"),
-    (r"unsafe release", "unsafe_release"),
-    (r"speeding|speed limit", "pit_lane_speeding"),
+    (r"unsafe release|released in an unsafe", "unsafe_release"),
+    (r"speedi*ing|speed limit", "pit_lane_speeding"),  # "Speediing": the FIA's typo
     (r"pit ?lane|pit exit|pit entry|pit stop", "pit_lane_procedure"),
     (r"yellow|blue flag|red flag", "flags"),
     (r"safety car|\bvsc\b", "safety_car"),

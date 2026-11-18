@@ -72,6 +72,9 @@ def test_a_table_of_drivers_gives_one_penalty_per_row():
         ("Doc 28 - Decision - Car 18 - Withdrawal from the Competition", "administrative"),
         ("Doc 64 - Decision - Williams Petition for Right of Review", None),
         ("Doc 7 - Decision - Car 3 - Leaving the pit lane", "pit_lane_procedure"),
+        ("Offence - Car 22 - Car Released in an Unsafe Condition", "unsafe_release"),
+        ("Doc 65 - Infringement - Car 22 - Speediing in the Pit Lane (2nd)", "pit_lane_speeding"),
+        ("Doc 12 - Infringement - Car 4 - Car in an unsafe condition", "unsafe_car"),
     ],
 )
 def test_incident_type_from_title(title, kind):

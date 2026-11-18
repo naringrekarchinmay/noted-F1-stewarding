@@ -52,6 +52,24 @@ CREATE TABLE IF NOT EXISTS extractions (
     created_at      TEXT    NOT NULL,
     PRIMARY KEY (document_id, model, prompt_version)
 );
+
+CREATE TABLE IF NOT EXISTS precedents (
+    document_id   INTEGER NOT NULL REFERENCES documents(id),
+    rank          INTEGER NOT NULL,  -- 1 = closest
+    precedent_id  INTEGER NOT NULL REFERENCES documents(id),
+    score         REAL    NOT NULL,
+    comparison    TEXT    NOT NULL,  -- the precedent's main penalty against this one's: same | harsher | lighter
+    PRIMARY KEY (document_id, rank)
+);
+
+CREATE TABLE IF NOT EXISTS challenges (
+    document_id   INTEGER NOT NULL REFERENCES documents(id),
+    precedent_id  INTEGER NOT NULL REFERENCES documents(id),
+    model         TEXT    NOT NULL,
+    score         INTEGER NOT NULL,  -- the model's 0 / 1 / 2: not, partly, clearly comparable
+    difference    TEXT,              -- the model's note; not checked against the source, so not shown
+    PRIMARY KEY (document_id, precedent_id, model)
+);
 """
 
 
