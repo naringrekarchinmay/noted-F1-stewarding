@@ -1,0 +1,47 @@
+[
+ {
+  "session_key": 9540,
+  "session_name": "Practice 1",
+  "session_type": "Practice",
+  "date_start": "2024-06-28T10:30:00+00:00",
+  "date_end": "2024-06-28T11:30:00+00:00",
+  "gmt_offset": "02:00:00",
+  "meeting_key": 1239
+ },
+ {
+  "session_key": 9545,
+  "session_name": "Sprint Qualifying",
+  "session_type": "Qualifying",
+  "date_start": "2024-06-28T14:30:00+00:00",
+  "date_end": "2024-06-28T15:14:00+00:00",
+  "gmt_offset": "02:00:00",
+  "meeting_key": 1239
+ },
+ {
+  "session_key": 9549,
+  "session_name": "Sprint",
+  "session_type": "Race",
+  "date_start": "2024-06-29T10:00:00+00:00",
+  "date_end": "2024-06-29T11:00:00+00:00",
+  "gmt_offset": "02:00:00",
+  "meeting_key": 1239
+ },
+ {
+  "session_key": 9541,
+  "session_name": "Qualifying",
+  "session_type": "Qualifying",
+  "date_start": "2024-06-29T14:00:00+00:00",
+  "date_end": "2024-06-29T15:00:00+00:00",
+  "gmt_offset": "02:00:00",
+  "meeting_key": 1239
+ },
+ {
+  "session_key": 9550,
+  "session_name": "Race",
+  "session_type": "Race",
+  "date_start": "2024-06-30T13:00:00+00:00",
+  "date_end": "2024-06-30T15:00:00+00:00",
+  "gmt_offset": "02:00:00",
+  "meeting_key": 1239
+ }
+]

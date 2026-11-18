@@ -1,0 +1,65 @@
+[
+ {
+  "meeting_key": 1304,
+  "meeting_name": "Pre-Season Testing",
+  "meeting_official_name": "FORMULA 1 ARAMCO PRE-SEASON TESTING 1 2026",
+  "year": 2026,
+  "is_cancelled": false,
+  "gmt_offset": "03:00:00",
+  "date_start": "2026-02-11T07:00:00+00:00"
+ },
+ {
+  "meeting_key": 1305,
+  "meeting_name": "Pre-Season Testing",
+  "meeting_official_name": "FORMULA 1 ARAMCO PRE-SEASON TESTING 2 2026",
+  "year": 2026,
+  "is_cancelled": false,
+  "gmt_offset": "03:00:00",
+  "date_start": "2026-02-18T07:00:00+00:00"
+ },
+ {
+  "meeting_key": 1282,
+  "meeting_name": "Bahrain Grand Prix",
+  "meeting_official_name": "FORMULA 1 GULF AIR BAHRAIN GRAND PRIX 2026",
+  "year": 2026,
+  "is_cancelled": true,
+  "gmt_offset": "03:00:00",
+  "date_start": "2026-04-10T11:30:00+00:00"
+ },
+ {
+  "meeting_key": 1287,
+  "meeting_name": "Barcelona Grand Prix",
+  "meeting_official_name": "FORMULA 1 MSC CRUISES GRAN PREMIO DE BARCELONA-CATALUNYA 2026",
+  "year": 2026,
+  "is_cancelled": false,
+  "gmt_offset": "02:00:00",
+  "date_start": "2026-06-12T11:30:00+00:00"
+ },
+ {
+  "meeting_key": 1294,
+  "meeting_name": "Spanish Grand Prix",
+  "meeting_official_name": "FORMULA 1 TAG HEUER GRAN PREMIO DE ESPAÑA 2026",
+  "year": 2026,
+  "is_cancelled": false,
+  "gmt_offset": "02:00:00",
+  "date_start": "2026-09-11T11:30:00+00:00"
+ },
+ {
+  "meeting_key": 1308,
+  "meeting_name": "Bahrain Grand Prix",
+  "meeting_official_name": "FORMULA 1 GULF AIR BAHRAIN GRAND PRIX IN MALAYSIA 2026",
+  "year": 2026,
+  "is_cancelled": false,
+  "gmt_offset": "08:00:00",
+  "date_start": "2026-10-02T04:30:00+00:00"
+ },
+ {
+  "meeting_key": 1299,
+  "meeting_name": "São Paulo Grand Prix",
+  "meeting_official_name": "FORMULA 1 MSC CRUISES GRANDE PRÊMIO DE SÃO PAULO 2026",
+  "year": 2026,
+  "is_cancelled": false,
+  "gmt_offset": "-03:00:00",
+  "date_start": "2026-11-06T15:30:00+00:00"
+ }
+]
