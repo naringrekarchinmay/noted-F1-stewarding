@@ -130,3 +130,15 @@ def test_a_missing_file_is_an_error_not_a_retry_loop():
     with pytest.raises(httpx.HTTPStatusError):
         _site(handler).get("https://www.fia.com/system/files/missing.pdf")
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    "url, expected",
+    [
+        ("a/Car%2023%20-%20107%.pdf", "a/Car%2023%20-%20107%25.pdf"),
+        ("a/107%%20Time.pdf", "a/107%25%20Time.pdf"),
+        ("a/plain%20name.pdf", "a/plain%20name.pdf"),
+    ],
+)
+def test_escape_stray_percent(url, expected):
+    assert fetch.escape_stray_percent(url) == expected

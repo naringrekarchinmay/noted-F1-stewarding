@@ -150,3 +150,11 @@ def test_a_ruling_missing_its_reason_is_partial():
     parsed = parse_text(cut)
     assert parsed.status == "partial"
     assert parsed.problems == ["missing reason"]
+
+
+def test_2023_form_with_the_misspelt_infringment_label():
+    parsed = load("2023_infringment_misspelt")
+    f = parsed.fields
+    assert parsed.status == "ok"
+    assert f["infringement"]["text"].startswith("Breach of Article 34.7")
+    assert f["decision"]["text"].startswith("The competitor (Scuderia AlphaTauri) is fined")

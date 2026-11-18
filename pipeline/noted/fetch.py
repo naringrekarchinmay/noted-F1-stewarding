@@ -185,9 +185,14 @@ def pdf_relpath(season: int, event_id: int, url: str) -> str:
     return f"pdfs/{season}/{event_id}/{name}"
 
 
+def escape_stray_percent(url: str) -> str:
+    """'107%.pdf' -> '107%25.pdf'. FIA file names can contain a bare '%', which the server rejects."""
+    return re.sub(r"%(?![0-9A-Fa-f]{2})", "%25", url)
+
+
 def download(site: Site, url: str, target: Path) -> str:
     """Save a PDF and return its sha256. Refuses anything that is not a PDF."""
-    response = site.get(url)
+    response = site.get(escape_stray_percent(url))
     body = response.content
     if not body.startswith(b"%PDF"):
         raise ValueError(f"Not a PDF: {url}")

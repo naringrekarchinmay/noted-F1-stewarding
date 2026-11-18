@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pymupdf
 
-PARSER_VERSION = 1
+PARSER_VERSION = 2  # 2: accepts the misspelt "Infringment" label
 
 PAGE_BREAK = "\f"
 
@@ -38,11 +38,12 @@ BODY_LABELS = (
     ("fact", "Fact"),
     ("infringement", "Infringement"),
     ("infringement", "Offence"),  # the word used before 2023
+    ("infringement", "Infringment"),  # the FIA's own misspelling, mid-2023 template
     ("decision", "Decision"),
     ("reason", "Reason"),
 )
 # Labels that may share a line with their value ("Infringement Breach of ...").
-INLINE_LABELS = {"Infringement", "Offence", "Fact", "Decision", "Reason", "Session", "Competitor"}
+INLINE_LABELS = {"Infringement", "Offence", "Infringment", "Fact", "Decision", "Reason", "Session", "Competitor"}
 
 _BOILERPLATE = re.compile(
     r"^(Competitors are reminded that they have the right to appeal"
