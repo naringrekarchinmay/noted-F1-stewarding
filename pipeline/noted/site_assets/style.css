@@ -283,6 +283,10 @@ li:nth-child(3n + 1) .stamp { transform: rotate(-2deg); }
 .brief { padding-bottom: 18px; border-bottom: 1px solid var(--hair); }
 .brief__computed { font-weight: 600; }
 
+/* an article the ruling cites, linked to the rulebook */
+.ref { text-decoration-color: var(--board); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.ref:hover { text-decoration-thickness: 2px; }
+
 .cite { background: var(--wash); color: inherit; box-shadow: inset 0 -2px 0 var(--board); padding: 2px 4px 3px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
 .cite__tag {
   margin-left: 6px;

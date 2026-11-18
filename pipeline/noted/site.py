@@ -16,7 +16,7 @@ from collections import defaultdict
 from html import escape
 from pathlib import Path
 
-from . import db, explain
+from . import db, explain, rules
 from .precedent import Index, Incident, _weight, describe, load, main_penalty
 
 ASSETS = Path(__file__).with_name("site_assets")
@@ -288,6 +288,23 @@ def scale(precedent_rows: list[tuple[Incident, str]], ruling: Incident) -> str:
             f'<span class="scale__dot scale__dot--this" style="--x:{x(ruling)}%">this</span></div>')
 
 
+def linked_rules(text: str, season: int, articles: dict[tuple[str, str], str], up: str = "../") -> str:
+    """Escaped Infringement text with each article of the current rulebooks linked: to its page on this
+    site when the rulebook was split into articles, otherwise to the FIA PDF."""
+    if season != rules.SEASON:
+        return escape(text)
+    out, pos = [], 0
+    for ref in rules.references(text):
+        page = articles.get((ref.book, ref.article))
+        href = f"{up}{page}" if page else rules.BOOKS[ref.book]["url"]
+        title = f"{rules.BOOKS[ref.book]['short']}, Article {ref.article}" if page else f"{rules.BOOKS[ref.book]['title']} (PDF)"
+        out.append(escape(text[pos:ref.start]))
+        out.append(f'<a class="ref" href="{escape(href)}" title="{escape(title)}">{escape(text[ref.start:ref.end])}</a>')
+        pos = ref.end
+    out.append(escape(text[pos:]))
+    return "".join(out)
+
+
 def numbered(text: str) -> str:
     """Escaped text with every number in the number face."""
     return re.sub(r"\d[\d,.]*\d|\d", lambda m: f'<span class="num">{m.group(0)}</span>', escape(text))
@@ -331,7 +348,12 @@ def ruling_page(i: Incident, data: dict, replay: dict | None) -> str:
         if key not in f:
             return ""
         value = f[key]
-        body = highlighted(text, value["start"], value["end"], factors) if key == "reason" else escape(value["text"])
+        if key == "reason":
+            body = highlighted(text, value["start"], value["end"], factors)
+        elif key == "infringement":
+            body = linked_rules(value["text"], i.season, data.get("articles", {}))
+        else:
+            body = escape(value["text"])
         return f'<section class="field{" field--hidden" if hide else ""}" data-field="{key}"><h2 class="field__label">{label}</h2><p class="field__text">{body}</p></section>'
 
     form = (f.get("form") or {}).get("text")

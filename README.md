@@ -36,6 +36,8 @@ Day 4 and 5: the site, in the "official notice board" direction (`PRODUCT.md`, `
 
 Day 6: briefs. The local model writes two or three sentences on what happened and why; a lint rejects any number, name or quote not in the document, any statement of the decision, verdict words and filler, and sends the problems back for a rewrite (four drafts at most). The decision and the comparison with the closest earlier rulings are composed in code. Briefs that never pass are not shown; power-unit and gearbox decisions get none. See `pipeline/eval/BRIEFS.md`.
 
+Day 6: rules. Article references in a 2026 ruling's Infringement field ("Article B1.8.5", "Appendix L, Chapter IV, Article 2 d)") link to the current FIA rulebook PDF (`pipeline/noted/rules.py`): Sporting Regulations Section B, issue 9, and ISC Appendix L 2026. Earlier seasons cite other rulebooks and are not linked.
+
 Close memory-heavy apps before a model run: with swap full the model runs about seven times slower.
 
 Data (PDFs and the database) lives in `data/` and is not committed.

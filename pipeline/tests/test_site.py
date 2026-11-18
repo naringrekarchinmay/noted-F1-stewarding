@@ -98,3 +98,14 @@ def test_a_brief_written_from_an_older_version_of_the_document_is_not_shown():
     data["briefs"] = {}
     assert brief_block(i, data) == ""
 
+
+def test_infringement_links_current_season_articles_to_their_page_or_the_pdf():
+    from noted.rules import BOOKS
+    from noted.site import linked_rules
+
+    text = "Breach of Article B1.8.5 & Appendix L, Chapter IV, Article 2 d) of the ISC."
+    html = linked_rules(text, 2026, {("sporting", "B1.8.5"): "rules/sporting/b1-8.html#B1.8.5"})
+    assert '<a class="ref" href="../rules/sporting/b1-8.html#B1.8.5" title="Sporting Regulations, Article B1.8.5">B1.8.5</a>' in html
+    assert f'href="{BOOKS["appendix_l"]["url"]}"' in html and ">Appendix L, Chapter IV, Article 2 d)</a>" in html
+    assert "&amp;" in html
+    assert linked_rules(text, 2025, {}) == text.replace("&", "&amp;")
