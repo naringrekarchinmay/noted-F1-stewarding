@@ -399,15 +399,17 @@ def ruling_page(i: Incident, data: dict, replay: dict | None) -> str:
                        f'<p class="note">Car positions from OpenF1 around the stated minute; drag to scrub. Positions are approximate.</p></section>')
 
     severity = verdict(i)[1]
+    votes = f' data-votes="{escape(data["votes"])}"' if data.get("votes") else ""
     steward = (f'<section class="steward" data-steward data-id="{i.id}" data-answer="{escape(verdict(i)[0])}" '
-               f'data-weight="{verdict(i)[2]}" data-severity="{severity}">'
+               f'data-weight="{verdict(i)[2]}" data-severity="{severity}"{votes}>'
                '<h2 class="field__label">Your ruling</h2>'
                '<p class="note">Decide before you see what the stewards did.</p>'
                '<div class="choices" role="group" aria-label="Your penalty">'
                + "".join(f'<button type="button" class="choice" data-choice="{c}">{c}</button>'
                          for c in ("NFA", "Warning", "Reprimand", "Fine", "5 s", "10 s", "Drive-thru", "Stop-go", "Grid drop", "DSQ"))
                + '</div><p class="steward__result" aria-live="polite"></p>'
-               '<button type="button" class="reveal" data-reveal>Skip to the decision</button></section>')
+               + ('<p class="steward__friends" aria-live="polite" hidden></p>' if votes else '')
+               + '<button type="button" class="reveal" data-reveal>Skip to the decision</button></section>')
 
     body = f"""
 <article class="ruling" data-ruling="{i.id}">
@@ -427,11 +429,14 @@ def ruling_page(i: Incident, data: dict, replay: dict | None) -> str:
     return page(f"{subject(i.title)} – {name} {event['season']}", body, 1, crumbs)
 
 
-def build(out: Path | None = None) -> Path:
+def build(out: Path | None = None, votes: str = "") -> Path:
+    """votes: the endpoint for friends' steward-mode votes (Cloudflare, see cloudflare/DEPLOY.md);
+    empty until it is deployed, so picks stay in each reader's browser."""
     out = out or site_dir()
     con = db.connect()
     data = gather(con)
     con.close()
+    data["votes"] = votes
     if out.exists():
         shutil.rmtree(out)
     (out / "e").mkdir(parents=True)

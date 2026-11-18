@@ -30,6 +30,48 @@
 
   // ------------------------------------------------------------ steward mode
 
+  // ------------------------------------------------------------ friends' votes
+  // Only when the page names an endpoint (built with `noted site --votes`); otherwise picks stay in this browser.
+
+  function voter() {
+    try {
+      let id = localStorage.getItem("noted:voter");
+      if (!id) {
+        id = crypto.randomUUID().replace(/-/g, "");
+        localStorage.setItem("noted:voter", id);
+      }
+      return id;
+    } catch { return null; }
+  }
+
+  async function friends(section, id, send) {
+    const endpoint = section.dataset.votes;
+    const out = section.querySelector(".steward__friends");
+    if (!endpoint || !out) return;
+    try {
+      const me = send && voter();
+      const res = me
+        ? await fetch(endpoint, {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ruling: Number(id), voter: me, choice: send }),
+        })
+        : await fetch(`${endpoint}?ruling=${encodeURIComponent(id)}`);
+      if (!res.ok) return;
+      if (me) store.put(id, { ...store.all()[id], sent: true });
+      const { total, counts } = await res.json();
+      if (!total) return;
+      out.replaceChildren("Friends: ");
+      Object.entries(counts).sort((a, b) => b[1] - a[1]).forEach(([choice, n], k) => {
+        if (k) out.append(" · ");
+        const b = document.createElement("b");
+        b.className = "num";
+        b.textContent = n;
+        out.append(b, ` × ${choice}`);
+      });
+      out.hidden = false;
+    } catch { /* offline or not deployed: the reader's own pick is already saved here */ }
+  }
+
   function steward(section) {
     const article = section.closest("[data-ruling]");
     const id = section.dataset.id;
@@ -68,16 +110,22 @@
     }
 
     const saved = store.all()[id];
-    if (saved) { reveal(saved.choice); return; }
+    if (saved) {
+      reveal(saved.choice);
+      friends(section, id, saved.choice && !saved.sent ? saved.choice : null); // a pick made before the site went live
+      return;
+    }
     article.classList.add("is-ruling");
     buttons.forEach((b) => b.addEventListener("click", () => {
       const choice = b.dataset.choice;
       store.put(id, { choice, theirs, verdict: compare(WEIGHT[choice], theirs), at: Date.now() });
       reveal(choice);
+      friends(section, id, choice);
     }));
     section.querySelector("[data-reveal]").addEventListener("click", () => {
       store.put(id, { choice: null, theirs, at: Date.now() });
       reveal(null);
+      friends(section, id, null);
     });
   }
 

@@ -1,0 +1,9 @@
+# Cloudflare Pages project for Noted. Run wrangler from this folder (see DEPLOY.md).
+name = "noted"
+pages_build_output_dir = "../data/site"
+compatibility_date = "2026-11-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "noted-votes"
+database_id = "REPLACE_AFTER_wrangler_d1_create"

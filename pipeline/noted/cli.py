@@ -441,11 +441,13 @@ def replay(limit: int = typer.Option(0, min=0, help="Stop after trying this many
 
 
 @app.command()
-def site() -> None:
+def site(
+    votes: bool = typer.Option(False, help="Send steward-mode picks to /api/votes (only once deployed to Cloudflare)."),
+) -> None:
     """Write the static site to data/site from the database."""
     from . import site as web
 
-    out = web.build()
+    out = web.build(votes="/api/votes" if votes else "")
     typer.echo(f"Wrote {sum(1 for _ in out.rglob('*.html'))} pages to {out}")
 
 

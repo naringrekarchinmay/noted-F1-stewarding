@@ -38,6 +38,8 @@ Day 6: briefs. The local model writes two or three sentences on what happened an
 
 Day 6: rules. Article references in a 2026 ruling's Infringement field ("Article B1.8.5", "Appendix L, Chapter IV, Article 2 d)") link to the current FIA rulebook PDF (`pipeline/noted/rules.py`): Sporting Regulations Section B, issue 9, and ISC Appendix L 2026. Earlier seasons cite other rulebooks and are not linked.
 
+Day 6: publish (planned, not deployed). `cloudflare/` holds a Pages Function for friends' steward-mode votes (`/api/votes`, D1), its schema and tests, and `DEPLOY.md`, the steps to follow once you have a free Cloudflare account. Build with `uv run noted site --votes` only for that deploy; without the flag, picks stay in each browser's localStorage.
+
 Close memory-heavy apps before a model run: with swap full the model runs about seven times slower.
 
 Data (PDFs and the database) lives in `data/` and is not committed.

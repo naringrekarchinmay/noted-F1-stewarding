@@ -112,6 +112,17 @@ def test_infringement_links_current_season_articles_to_their_page_or_the_pdf():
 
 
 
+def test_vote_sync_is_off_unless_an_endpoint_is_given():
+    from noted.site import ruling_page
+
+    i, data = _brief_data()
+    data |= {"events": {1: {"id": 1, "season": 2026, "name": "Test Grand Prix", "position": 0}}, "drivers": {}}
+    off = ruling_page(i, data, None)
+    assert "data-votes" not in off and "steward__friends" not in off
+    on = ruling_page(i, data | {"votes": "/api/votes"}, None)
+    assert 'data-votes="/api/votes"' in on and '<p class="steward__friends" aria-live="polite" hidden></p>' in on
+
+
 def test_numbered_wraps_numbers_without_breaking_escaped_characters():
     from noted.site import numbered
 

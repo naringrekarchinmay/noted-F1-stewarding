@@ -355,6 +355,8 @@ li:nth-child(3n + 1) .stamp { transform: rotate(-2deg); }
 .steward__result { margin: 0; font-size: 15px; }
 .steward__result:not(:empty) { margin-top: 12px; }
 .steward__result b { font-weight: 700; }
+.steward__friends { margin: 6px 0 0; font-size: 15px; color: var(--mute); }
+.steward__friends b { color: var(--ink); }
 
 /* ------------------------------------------------------------ replay */
 
