@@ -364,6 +364,15 @@ def replay(limit: int = typer.Option(0, min=0, help="Stop after trying this many
         con.close()
 
 
+@app.command()
+def site() -> None:
+    """Write the static site to data/site from the database."""
+    from . import site as web
+
+    out = web.build()
+    typer.echo(f"Wrote {sum(1 for _ in out.rglob('*.html'))} pages to {out}")
+
+
 @app.command("gold-sheet")
 def gold_sheet() -> None:
     """Write eval/GOLD.md: each gold ruling's decision and reasons beside its labels, for checking by hand."""

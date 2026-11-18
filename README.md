@@ -22,8 +22,16 @@ uv run noted score --model rules --model gemma4:e4b --detail
 uv run noted gold-sheet                            # eval/GOLD.md, the gold labels for checking by hand
 uv run noted status
 uv run noted show 79                               # one parsed ruling, by database id
+uv run noted precedent --challenge                 # closest earlier rulings; the model re-ranks on-track ones (about 2 h)
+uv run noted replay                                # car positions from OpenF1 around each incident, cached
+uv run noted site                                  # static site in data/site
+python3 -m http.server 4174 --directory ../data/site
 uv run pytest
 ```
+
+Day 3: precedent. TF-IDF over the stewards' wording with names masked, factor overlap, and a local-model check of the top eight for on-track incidents. A blind check found at least two good matches in the top three for 15 of 20 incidents; see `pipeline/eval/PRECEDENT.md`.
+
+Day 4 and 5: the site, in the "official notice board" direction (`PRODUCT.md`, `DESIGN.md`). Each weekend is a board of rulings by session; each ruling page hides the decision until you rule on it yourself (kept in your browser), then shows the stewards' reasons with cited quotes, the precedents on one penalty scale, and an OpenF1 replay of the cars for 324 rulings since 2023.
 
 Close memory-heavy apps before a model run: with swap full the model runs about seven times slower.
 
