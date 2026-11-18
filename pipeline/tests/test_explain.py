@@ -104,6 +104,9 @@ def test_decision_sentence():
     assert decision_sentence("no_further_action", "none", None) == "The stewards took no further action."
     assert decision_sentence("dismissed", "none", None) == "The stewards dismissed it."
     assert decision_sentence("penalty", "lap_time_deleted", None) == "The stewards deleted the lap time."
+    # a penalty outcome whose penalties are all suspended: say nothing rather than "no further action"
+    assert decision_sentence("penalty", "none", None) == ""
+    assert decision_sentence(None, "none", None) == ""
 
 
 def test_precedent_sentence_speaks_of_the_earlier_rulings_penalty():
@@ -112,3 +115,10 @@ def test_precedent_sentence_speaks_of_the_earlier_rulings_penalty():
     assert precedent_sentence(["same", "same", "same", "lighter"]) == "All 3 closest earlier rulings got the same penalty."
     assert precedent_sentence(["same", "lighter", "same", "harsher"]) == \
         "Of the 3 closest earlier rulings, 2 got the same penalty and 1 got a lighter one."
+
+
+def test_precedent_sentence_for_a_ruling_without_a_penalty():
+    assert precedent_sentence(["same"], penalised=False) == "The closest earlier ruling also ended without a penalty."
+    assert precedent_sentence(["same", "harsher", "same"], penalised=False) == \
+        "Of the 3 closest earlier rulings, 2 also ended without a penalty and 1 got a penalty."
+    assert precedent_sentence(["harsher", "harsher"], penalised=False) == "Both closest earlier rulings got a penalty."

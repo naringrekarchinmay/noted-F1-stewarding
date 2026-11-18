@@ -74,7 +74,8 @@ def input_hash(model_input: str) -> str:
 
 
 def decision_sentence(outcome: str | None, kind: str, value: float | None) -> str:
-    """The stewards' decision in one sentence, from the extracted penalty and outcome."""
+    """The stewards' decision in one sentence, from the extracted penalty and outcome; empty when the
+    extraction does not settle it (a penalty outcome whose only penalties are suspended or off the scale)."""
     if kind == "lap_time_deleted":
         return "The stewards deleted the lap time."
     if kind == "back_of_grid":
@@ -82,30 +83,31 @@ def decision_sentence(outcome: str | None, kind: str, value: float | None) -> st
     if kind != "none":
         return f"The stewards imposed a {describe(kind, value)}."
     return {
+        "no_further_action": "The stewards took no further action.",
         "dismissed": "The stewards dismissed it.",
         "upheld": "The stewards upheld it.",
         "approved": "The stewards approved the request.",
-    }.get(outcome or "", "The stewards took no further action.")
+    }.get(outcome or "", "")
 
 
-def precedent_sentence(comparisons: list[str]) -> str:
+def precedent_sentence(comparisons: list[str], penalised: bool = True) -> str:
     """How the closest earlier rulings were punished, from the precedents table. Each comparison is the
-    precedent's penalty against this ruling's: 'harsher' means the earlier ruling got the heavier one."""
+    precedent's penalty against this ruling's: 'harsher' means the earlier ruling got the heavier one.
+    penalised is whether this ruling imposed a penalty; without one, "the same penalty" would mislead."""
     top = comparisons[:3]
     if not top:
         return ""
+    if penalised:
+        one = {"same": "got the same penalty", "harsher": "got a harsher penalty", "lighter": "got a lighter penalty"}
+        some = {"same": "got the same penalty", "harsher": "got a harsher one", "lighter": "got a lighter one"}
+    else:  # nothing is lighter than no penalty
+        one = some = {"same": "also ended without a penalty", "harsher": "got a penalty", "lighter": "got a penalty"}
     if len(top) == 1:
-        return {"same": "The closest earlier ruling got the same penalty.",
-                "harsher": "The closest earlier ruling got a harsher penalty.",
-                "lighter": "The closest earlier ruling got a lighter penalty."}[top[0]]
+        return f"The closest earlier ruling {one[top[0]]}."
     counts = Counter(top)
-    words = {"same": "got the same penalty", "harsher": "got a harsher one", "lighter": "got a lighter one"}
-    parts = [f"{counts[k]} {words[k]}" for k in ("same", "harsher", "lighter") if counts[k]]
+    parts = [f"{counts[k]} {some[k]}" for k in ("same", "harsher", "lighter") if counts[k]]
     if len(parts) == 1:
-        n = len(top)
-        return {"same": f"All {n} closest earlier rulings got the same penalty.",
-                "harsher": f"All {n} closest earlier rulings got a harsher penalty.",
-                "lighter": f"All {n} closest earlier rulings got a lighter penalty."}[top[0]]
+        return f"{'Both' if len(top) == 2 else f'All {len(top)}'} closest earlier rulings {one[top[0]]}."
     joined = ", ".join(parts[:-1]) + " and " + parts[-1]
     return f"Of the {len(top)} closest earlier rulings, {joined}."
 

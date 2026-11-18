@@ -109,3 +109,11 @@ def test_infringement_links_current_season_articles_to_their_page_or_the_pdf():
     assert f'href="{BOOKS["appendix_l"]["url"]}"' in html and ">Appendix L, Chapter IV, Article 2 d)</a>" in html
     assert "&amp;" in html
     assert linked_rules(text, 2025, {}) == text.replace("&", "&amp;")
+
+
+
+def test_numbered_wraps_numbers_without_breaking_escaped_characters():
+    from noted.site import numbered
+
+    assert numbered("McLaren's 4 points & 0.6 km/h") == \
+        'McLaren&#x27;s <span class="num">4</span> points &amp; <span class="num">0.6</span> km/h'

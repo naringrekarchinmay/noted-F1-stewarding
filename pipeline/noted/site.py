@@ -307,7 +307,8 @@ def linked_rules(text: str, season: int, articles: dict[tuple[str, str], str], u
 
 def numbered(text: str) -> str:
     """Escaped text with every number in the number face."""
-    return re.sub(r"\d[\d,.]*\d|\d", lambda m: f'<span class="num">{m.group(0)}</span>', escape(text))
+    parts = re.split(r"(\d[\d,.]*\d|\d)", text)  # odd items are the numbers; escape after splitting, not before
+    return "".join(f'<span class="num">{escape(p)}</span>' if k % 2 else escape(p) for k, p in enumerate(parts))
 
 
 def brief_block(i: Incident, data: dict) -> str:
@@ -323,10 +324,11 @@ def brief_block(i: Incident, data: dict) -> str:
         return ""
     comparisons = [cmp for p, cmp in data["precedents"].get(i.id, []) if p in data["index"].by_id]
     written = numbered(cached[0])
-    computed = numbered(" ".join(x for x in (explain.decision_sentence(i.outcome, *main_penalty(i)),
-                                            explain.precedent_sentence(comparisons)) if x))
+    kind, value = main_penalty(i)
+    computed = numbered(" ".join(x for x in (explain.decision_sentence(i.outcome, kind, value),
+                                            explain.precedent_sentence(comparisons, kind != "none")) if x))
     return (f'<section class="field brief field--hidden" data-field="brief"><h2 class="field__label">In brief</h2>'
-            f'<p class="field__text brief__text">{written} <span class="brief__computed">{computed}</span></p>'
+            f'<p class="field__text brief__text">{written}{f" <span class=\"brief__computed\">{computed}</span>" if computed else ""}</p>'
             '<p class="note">Written by a local model from the stewards’ text below, then checked against it: '
             'every name, number and quote must appear there. The decision and the comparison are computed, not written. '
             'A hand check of 20 found one that gave a reason the stewards did not.</p>'
