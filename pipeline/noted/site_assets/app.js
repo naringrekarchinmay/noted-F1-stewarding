@@ -3,6 +3,7 @@
 
 (() => {
   "use strict";
+  document.documentElement.classList.add("js"); // without it, CSS hides the steward controls
 
   const WEIGHT = {
     "NFA": 0, "Warning": 1, "Reprimand": 2, "Fine": 2.5, "5 s": 3.05, "10 s": 3.1,
@@ -45,6 +46,17 @@
         b.setAttribute("aria-pressed", String(b.dataset.choice === choice));
       });
       section.querySelector("[data-reveal]").hidden = true;
+      // the stewards' own penalty, marked in the grid: the choice nearest their weight
+      const nearest = buttons.reduce((a, b) => Math.abs(WEIGHT[b.dataset.choice] - theirs) < Math.abs(WEIGHT[a.dataset.choice] - theirs) ? b : a);
+      nearest.classList.add("is-answer");
+      const scale = article.querySelector(".scale");
+      if (choice && scale) {
+        const you = document.createElement("span");
+        you.className = "scale__dot scale__dot--you";
+        you.style.setProperty("--x", `${(100 * Math.min(WEIGHT[choice], 6)) / 6}%`);
+        you.textContent = "you";
+        scale.append(you);
+      }
       if (choice) {
         const verdict = compare(WEIGHT[choice], theirs);
         const words = { same: "You ruled the same as the stewards.", harsher: "You were harsher than the stewards.", lighter: "You were more lenient than the stewards." };
@@ -95,8 +107,9 @@
     const seen = [].concat(...data.cars.map((c) => c.points.map((p) => [p[1], p[2]])));
     const xs = seen.map((p) => p[0]), ys = seen.map((p) => p[1]);
     const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-    const half = Math.max(1500, (Math.max(...xs) - Math.min(...xs)) * 0.6, (Math.max(...ys) - Math.min(...ys)) * 0.6);
-    const hw = half * 1.4, hh = half; // a little wider than tall
+    const hw = Math.max(1500, (Math.max(...xs) - Math.min(...xs)) * 0.56);
+    const hh = Math.max(1100, (Math.max(...ys) - Math.min(...ys)) * 0.56);
+    const half = Math.max(hw, hh);
     const minX = cx - hw, minY = cy - hh, maxY = cy + hh;
     const flip = (y) => maxY - (y - minY); // OpenF1's y grows upwards
     const u = half / 100; // one unit of drawing size, so marks look the same at any zoom
@@ -123,7 +136,11 @@
       <button type="button" class="replay__btn" data-step="1" aria-label="Forward one second">+1 s</button>
       <input class="replay__range" type="range" min="0" max="${end}" step="0.1" value="0" aria-label="Time">
       <output class="replay__t num">0.0 s</output>`;
-    stage.append(svg, controls);
+    const legend = document.createElement("p");
+    legend.className = "replay__legend";
+    legend.innerHTML = data.cars.map((c, k) =>
+      `<span class="replay__key replay__key--${k}">${c.name ? c.name.split(" ").pop().slice(0, 3).toUpperCase() : ""} <span class="num">#${c.number}</span></span>`).join("");
+    stage.append(svg, legend, controls);
     const range = controls.querySelector(".replay__range");
     const out = controls.querySelector(".replay__t");
     const play = controls.querySelector(".replay__play");

@@ -26,6 +26,10 @@ MAX_WEIGHT = 6.0  # disqualification, the heaviest penalty on the scale
 VERSION = hashlib.sha1(b"".join(p.read_bytes() for p in sorted(ASSETS.iterdir()))).hexdigest()[:8]
 
 
+def slug(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", text.casefold()).strip("-")
+
+
 def site_dir() -> Path:
     return db.data_dir() / "site"
 
@@ -140,7 +144,16 @@ def gather(con) -> dict:
     events = {
         r["id"]: dict(r) for r in con.execute("SELECT id, season, name, position FROM events")
     }
-    return {"index": index, "fields": fields, "extractions": extractions, "precedents": precedents, "events": events}
+    season_of = {i.id: i.season for i in index.incidents}
+    drivers: dict[tuple[int, int], str] = {}  # (season, car number) -> driver code, for cars named only by number
+    for doc_id, (f, _) in fields.items():
+        season = season_of.get(doc_id)
+        named = [f.get("driver") or {}] + list((f.get("fact") or {}).get("cars", []))
+        for c in named:
+            if season and c.get("number") and c.get("name"):
+                drivers.setdefault((season, c["number"]), code(c["name"]))
+    return {"index": index, "fields": fields, "extractions": extractions, "precedents": precedents, "events": events,
+            "drivers": drivers}
 
 
 def issued(fields: dict) -> str:
@@ -149,14 +162,26 @@ def issued(fields: dict) -> str:
     return m.group(0) if m else ""
 
 
-def car_codes(incident: Incident, fields: dict) -> list[tuple[int, str]]:
+def car_codes(incident: Incident, fields: dict, drivers: dict) -> list[tuple[int, str]]:
+    """Every car in the incident with its driver code; the cited driver first."""
     names = {}
     driver = fields.get("driver") or {}
     if driver.get("number"):
         names[driver["number"]] = code(driver.get("name"))
     for c in (fields.get("fact") or {}).get("cars", []):
         names.setdefault(c["number"], code(c["name"]))
-    return sorted(((n, names.get(n, "")) for n in incident.cars), key=lambda nc: (nc[0] not in names, nc[0]))
+    cars = set(incident.cars) | {int(n) for n in re.findall(r"\bCars? (\d{1,2})\b", (fields.get("fact") or {}).get("text", ""))}
+    first = driver.get("number")
+    return sorted(((n, names.get(n) or drivers.get((incident.season, n), "")) for n in cars),
+                  key=lambda nc: (nc[0] != first, nc[0] not in names, nc[0]))
+
+
+def chip(number: int, driver_code: str) -> str:
+    return f'<span class="car"><em>{number}</em>{escape(driver_code)}</span>'
+
+
+def name_of(event: dict) -> str:
+    return event["name"].title() if event["name"].isupper() else event["name"]
 
 
 # ---------------------------------------------------------------- pages
@@ -197,13 +222,15 @@ def event_page(event: dict, data: dict) -> str:
         groups[session_label((data["fields"][i.id][0].get("session") or {}).get("text"))].append(i)
     order = sorted(groups, key=lambda s: (s == "Other", -SESSION_ORDER.index(s)))  # Race first, Other last
     name = event["name"].title() if event["name"].isupper() else event["name"]
-    parts = [f'<h1 class="title">{escape(name)} <span class="title__season">{event["season"]}</span></h1>']
+    parts = [f'<h1 class="title">{escape(name)} <span class="title__season">{event["season"]}</span></h1>',
+             '<nav class="jump" aria-label="Sessions">' + "".join(
+                 f'<a href="#{slug(s)}">{s}<b class="num">{len(groups[s])}</b></a>' for s in order) + '</nav>']
     for s in order:
         rows = []
         for i in groups[s]:
             f = data["fields"][i.id][0]
             doc = re.match(r"Doc (\d+)", i.title)
-            chips = "".join(f'<span class="car">{escape(c) or n}</span>' for n, c in car_codes(i, f)[:3])
+            chips = "".join(chip(n, c) for n, c in car_codes(i, f, data["drivers"])[:2])
             rows.append(
                 f'<li><a class="row" href="../r/{i.id}.html">'
                 f'<span class="row__time num">{issued(f)}</span>'
@@ -213,7 +240,7 @@ def event_page(event: dict, data: dict) -> str:
                 f'{stamp(i)}</a></li>'
             )
         parts.append(
-            f'<section class="board"><h2 class="board__head">{s}<span class="board__count">{len(groups[s])} ruling{"s" if len(groups[s]) != 1 else ""}</span></h2>'
+            f'<section class="board" id="{slug(s)}"><h2 class="board__head">{s}<span class="board__count">{len(groups[s])} ruling{"s" if len(groups[s]) != 1 else ""}</span></h2>'
             f'<ol class="rows">{"".join(rows)}</ol></section>'
         )
     crumbs = f'<span>{event["season"]}</span>'
@@ -264,7 +291,7 @@ def ruling_page(i: Incident, data: dict, replay: dict | None) -> str:
     doc = re.match(r"Doc (\d+)", i.title)
     name = event["name"].title() if event["name"].isupper() else event["name"]
     sess = (f.get("session") or {}).get("text", "")
-    cars = " ".join(f'<span class="car">{escape(c) or n}</span><span class="car__no num">#{n}</span>' for n, c in car_codes(i, f))
+    cars = "".join(chip(n, c) for n, c in car_codes(i, f, data["drivers"]))
     meta = " · ".join(x for x in (sess, f"Issued {issued(f)}" if issued(f) else "", f"Doc {doc.group(1)}" if doc else "") if x)
 
     def block(key: str, label: str, hide: bool = False) -> str:
@@ -327,9 +354,8 @@ def ruling_page(i: Incident, data: dict, replay: dict | None) -> str:
 
     body = f"""
 <article class="ruling" data-ruling="{i.id}">
-  <p class="ruling__meta">{escape(meta)}</p>
   <h1 class="title title--ruling">{escape(subject(i.title))}</h1>
-  <p class="ruling__cars">{cars}</p>
+  <p class="ruling__cars">{cars}<span class="ruling__meta">{escape(meta)}</span></p>
   <div class="verdict field--hidden" data-field="verdict">{stamp(i)}<span class="verdict__full">{escape(describe(*main_penalty(i)).capitalize())}</span></div>
   {steward}
   {facts}

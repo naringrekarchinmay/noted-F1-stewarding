@@ -36,3 +36,16 @@ def test_highlighted_marks_quotes_and_escapes():
     assert '<span class="cite__text">hit car 4</span>' in out
     assert '<span class="cite__tag">minimal impact</span>' in out
     assert out.endswith("It was not deliberate.")
+
+
+def test_car_codes_adds_cars_named_in_the_fact_and_looks_up_their_codes():
+    from noted.precedent import Incident
+    from noted.site import car_codes, chip
+
+    i = Incident(id=1, event_id=1, event="x", season=2026, published_at="", title="", url="", type="forcing_off",
+                 group="forcing_off", session="practice", cars={63}, outcome=None, penalties=[], factors=set(),
+                 text="", names=set())
+    fields = {"driver": {"number": 63, "name": "George Russell"},
+              "fact": {"text": "Car 63 appeared to force Car 16 off the Track at Turn 18"}}
+    assert car_codes(i, fields, {(2026, 16): "LEC"}) == [(63, "RUS"), (16, "LEC")]
+    assert chip(16, "LEC") == '<span class="car"><em>16</em>LEC</span>'

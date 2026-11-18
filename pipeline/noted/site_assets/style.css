@@ -10,13 +10,14 @@
   --mute: #4f5a80;          /* secondary text on the sheet, 6.6:1 */
   --rule: #a3b1d6;          /* secondary text on the board, 7.4:1 */
   --hair: #d6dcec;
+  --chip-no: #a9b3d3;       /* car number inside an ink chip, 8.9:1 */
   --wash: #eef1f8;
   --red: #c8231d;           /* stamp red, darkened from #e0312b for 5.6:1 on white */
   --amber: #f2a900;
   --amber-wash: #fff2cc;
-  --car-0: #c8231d;
-  --car-1: #14214f;
-  --car-2: #9a6a00;
+  --car-0: #2f5fd0;        /* incident cars: reserved, never stamp red */
+  --car-1: #0d1324;
+  --car-2: #8a5a00;
   --word: "Archivo", "Helvetica Neue", Arial, sans-serif;
   --num: "IBM Plex Mono", ui-monospace, Menlo, monospace;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
@@ -57,7 +58,7 @@ a { color: inherit; }
   display: flex;
   align-items: baseline;
   gap: 14px;
-  padding: 14px var(--gutter) 10px;
+  padding: 14px max(var(--gutter), calc((100% - 880px) / 2 + 16px)) 10px;
   border-bottom: 1px solid var(--board-2);
 }
 
@@ -183,7 +184,7 @@ main {
 .row:hover { background: var(--wash); }
 .row__time { grid-area: 1 / 1; font-size: 14px; font-weight: 600; line-height: 1.15; }
 .row__doc { grid-area: 2 / 1; font-size: 11px; color: var(--mute); letter-spacing: 0.02em; line-height: 1.2; }
-.row__cars { grid-area: 1 / 2 / 3 / 3; display: flex; gap: 3px; }
+.row__cars { grid-area: 1 / 2 / 3 / 3; display: flex; flex-wrap: wrap; gap: 3px; }
 .row__subject {
   grid-area: 1 / 3 / 3 / 4;
   font-size: 14.5px;
@@ -204,7 +205,8 @@ main {
   font: 600 12px/20px var(--num);
   letter-spacing: 0.02em;
 }
-.car__no { margin: 0 10px 0 4px; color: var(--mute); font-size: 13px; }
+.car em { margin-right: 4px; color: var(--chip-no); font-style: normal; font-weight: 500; }
+.ruling__cars .car { margin-right: 6px; }
 
 /* ------------------------------------------------------------ stamps */
 
@@ -223,7 +225,7 @@ main {
   transform: rotate(-1.5deg);
 }
 .stamp--heavy { color: var(--red); }
-.stamp--light { color: var(--ink); border-color: var(--amber); background: var(--amber-wash); }
+.stamp--light { color: var(--ink); border-color: var(--ink); background: var(--amber-wash); }
 .stamp--none { color: var(--mute); border-color: var(--rule); }
 li:nth-child(3n) .stamp { transform: rotate(-0.6deg); }
 li:nth-child(3n + 1) .stamp { transform: rotate(-2deg); }
@@ -237,7 +239,7 @@ li:nth-child(3n + 1) .stamp { transform: rotate(-2deg); }
 }
 @media (min-width: 720px) { .ruling { padding: 32px 40px 40px; } }
 
-.ruling__meta { margin: 0 0 8px; color: var(--mute); font: 500 12.5px/1.4 var(--num); letter-spacing: 0.01em; }
+.ruling__meta { margin-left: 4px; color: var(--mute); font: 500 12.5px/1.4 var(--num); letter-spacing: 0.01em; }
 .title--ruling { margin: 0 0 12px; color: var(--ink); }
 .ruling__cars { margin: 0 0 20px; display: flex; flex-wrap: wrap; align-items: center; row-gap: 6px; }
 
@@ -311,10 +313,23 @@ li:nth-child(3n + 1) .stamp { transform: rotate(-2deg); }
   transition: background-color 160ms var(--ease), border-color 160ms var(--ease);
 }
 .choice:hover:not(:disabled) { background: var(--board-3); border-color: var(--rule); }
-.choice:disabled { cursor: default; opacity: 0.45; }
+.choice:disabled { cursor: default; }
 .is-revealed .choice { background: var(--sheet); color: var(--mute); border-color: var(--hair); }
 .choice[aria-pressed="true"] { opacity: 1; background: var(--amber); border-color: var(--amber); color: var(--ink); }
 .is-revealed .choice[aria-pressed="true"] { background: var(--amber); color: var(--ink); border-color: var(--amber); }
+.is-revealed .choice.is-answer { position: relative; border: 2px solid var(--ink); color: var(--ink); }
+.is-revealed .choice.is-answer::after {
+  content: "Stewards";
+  position: absolute;
+  top: -7px;
+  right: 4px;
+  padding: 0 3px;
+  background: var(--ink);
+  color: var(--sheet);
+  font: 600 11px/14px var(--num);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
 
 .reveal {
   margin-top: 10px;
@@ -338,7 +353,7 @@ li:nth-child(3n + 1) .stamp { transform: rotate(-2deg); }
 .replay__stage { background: var(--sheet); border: 1px solid var(--hair); }
 .replay__svg { display: block; width: 100%; height: auto; max-height: 420px; }
 .replay__track { fill: none; stroke: var(--hair); stroke-linejoin: round; stroke-linecap: round; }
-.replay__trail { fill: none; stroke-linecap: round; stroke-linejoin: round; opacity: 0.45; }
+.replay__trail { fill: none; stroke-linecap: round; stroke-linejoin: round; opacity: 0.8; }
 .replay__car { stroke: var(--sheet); }
 .replay__label { font-family: var(--num); font-weight: 600; fill: var(--ink); paint-order: stroke; stroke: var(--sheet); }
 .replay__trail--0 { stroke: var(--car-0); } .replay__car--0 { fill: var(--car-0); }
@@ -405,8 +420,9 @@ li:nth-child(3n + 1) .stamp { transform: rotate(-2deg); }
   width: 0;
   height: auto;
   margin: 0;
-  border-left: 2px solid var(--amber);
+  border-left: 2px solid var(--ink);
   color: var(--ink);
+  font-size: 0;
 }
 .scale__dot--this::before {
   content: "this";
@@ -417,7 +433,6 @@ li:nth-child(3n + 1) .stamp { transform: rotate(-2deg); }
   font: 700 11px/1 var(--num);
   text-transform: uppercase;
 }
-.scale__dot--this { font-size: 0; }
 
 .prec {
   display: grid;
@@ -447,8 +462,8 @@ li:nth-child(3n + 1) .stamp { transform: rotate(-2deg); }
 /* ------------------------------------------------------------ small screens */
 
 @media (max-width: 420px) {
-  .row { grid-template-columns: 44px 78px minmax(0, 1fr) 64px; column-gap: 8px; padding: 7px 8px; }
-  .row__cars .car:nth-child(n + 3) { display: none; }
+  .row { grid-template-columns: 44px 58px minmax(0, 1fr) 64px; column-gap: 8px; padding: 7px 8px; }
+  .row__cars { flex-direction: column; align-items: flex-start; }
   .stamp { min-width: 0; font-size: 11px; padding: 4px 5px 3px; }
   .verdict .stamp { font-size: 16px; }
 }
@@ -457,3 +472,60 @@ li:nth-child(3n + 1) .stamp { transform: rotate(-2deg); }
   .is-revealed .verdict .stamp { animation: none; }
   .choice, .reveal, .replay__btn { transition: none; }
 }
+
+/* ------------------------------------------------------------ review fixes */
+
+/* without JS there is nothing to rule on and no scrubber: show the sheet plainly */
+html:not(.js) .steward, html:not(.js) .replay { display: none; }
+
+.scale__dot { z-index: 1; }
+.scale__tick { bottom: 22px; }
+.scale__tick span { bottom: -18px; }
+.scale__dot--you {
+  top: auto;
+  bottom: 28px;
+  width: auto;
+  padding: 0 4px;
+  margin-left: 0;
+  transform: translateX(-50%);
+  background: var(--sheet);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 2px var(--amber);
+  text-transform: uppercase;
+  z-index: 2;
+}
+
+.replay__legend { display: flex; gap: 16px; margin: 0; padding: 8px 10px 0; border-top: 1px solid var(--hair); font: 600 13px/1.3 var(--num); }
+.replay__key::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 50%; vertical-align: -1px; }
+.replay__key--0::before { background: var(--car-0); }
+.replay__key--1::before { background: var(--car-1); }
+.replay__key--2::before { background: var(--car-2); }
+.replay__legend + .replay__controls { border-top: 0; }
+
+.jump {
+  display: flex;
+  margin: 14px 0 0;
+  border-top: 1px solid var(--board-2);
+  border-bottom: 1px solid var(--board-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.jump a {
+  flex: 1 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 12px;
+  color: var(--rule);
+  text-decoration: none;
+  font-weight: 700;
+  font-stretch: 80%;
+  font-size: 12.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.jump a:hover { color: var(--sheet); box-shadow: inset 0 -2px 0 var(--sheet); }
+.jump b { font-size: 11px; font-weight: 500; }
+.board { scroll-margin-top: 12px; }
