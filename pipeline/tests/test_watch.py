@@ -71,6 +71,18 @@ def test_without_ollama_nothing_is_deployed_or_posted(con):
     assert run.calls == ["fetch", "parse"] and sent == [] and "Ollama" in report.stopped
 
 
+def test_without_a_channel_it_deploys_once_and_posts_when_a_channel_appears(con):
+    run = Runner()
+    cycle(con, SATURDAY, run=run, model_up=lambda: True, post=None)
+    assert "deploy" in run.calls
+    again = Runner()
+    cycle(con, SATURDAY, run=again, model_up=lambda: True, post=None)
+    assert "site" not in again.calls and "deploy" not in again.calls  # nothing new: no redeploy every 15 minutes
+    sent, later = [], Runner()
+    report = cycle(con, SATURDAY, run=later, model_up=lambda: True, post=sent.append)
+    assert report.posted == 1 and "/r/20>" in sent[0] and "deploy" not in later.calls
+
+
 def test_a_failed_deploy_holds_the_post(con):
     run, sent = Runner({"deploy": 1}), []
     report = cycle(con, SATURDAY, run=run, model_up=lambda: True, post=sent.append)
@@ -133,3 +145,9 @@ def test_demo_prepare_resets_the_event_in_a_copy_and_leaves_the_live_database_al
     assert copy.execute("SELECT COUNT(*) FROM rulings WHERE document_id = 10").fetchone()[0] == 1  # other events kept
     assert con.execute("SELECT COUNT(*) FROM rulings WHERE document_id = 20").fetchone()[0] == 1  # live untouched
     assert con.execute("SELECT COUNT(*) FROM precedents").fetchone()[0] == 1
+
+
+def test_with_deploy_off_the_local_build_counts_as_published(con):
+    sent = []
+    report = cycle(con, SATURDAY, run=Runner(), model_up=lambda: True, post=sent.append, deploy=False)
+    assert report.posted == 1 and "deploy" not in report.steps

@@ -10,7 +10,9 @@ Rules it keeps:
   - The model steps need Ollama. If Ollama is not answering, the cycle stops after parsing and the
     next cycle tries again; nothing is deployed or posted with rulings half done.
   - Posts name the incident and link to it, never the penalty: steward mode is the point.
-  - A ruling is posted once (the posts table). The first cycle for a season marks everything already
+  - The site is rebuilt and deployed only when the current event has a ruling the last deploy did
+    not show (watch-state.json); a ruling is posted only once it is on the deployed site, and only
+    once (the posts table). The first cycle for a season marks everything already
     published as posted, so turning the watcher on does not flood the channel.
   - One cycle at a time (a lock file); launchd runs it every 15 minutes, Thursday to Monday.
 """
@@ -230,23 +232,29 @@ def cycle(con, now: datetime, *, run: Runner = run_command, model_up: Callable[[
     seeded = seed(con, season, event["id"] if event else None)
     if seeded:
         report.steps.append(f"marked {seeded} earlier rulings as seen")
-    fresh = unposted(con, event["id"]) if event else []
-    if fresh:
-        run(noted("replay", "--only", ",".join(str(r["id"]) for r in fresh)), PIPELINE)
+    shown = shown_rulings(con, event["id"]) if event else []
+    deployed = set(read_state().get("deployed", []))
+    new_on_site = [r for r in shown if r["id"] not in deployed]
+    if new_on_site:
+        run(noted("replay", "--only", ",".join(str(r["id"]) for r in new_on_site)), PIPELINE)
         report.steps.append("replay")
-    if not fresh and not force:
-        return report
-
-    if run(noted("site", "--votes"), PIPELINE) != 0:
-        report.stopped = "site build failed"
-        return report
-    report.steps.append("site")
-    if deploy:
-        cmd = [tool("npx"), "-y", WRANGLER, "pages", "deploy", "--branch", "main", "--commit-dirty=true"]
-        if run(cmd, CLOUDFLARE) != 0:
-            report.stopped = "deploy failed; posts wait until the site is up"
+    if new_on_site or force:
+        if run(noted("site", "--votes"), PIPELINE) != 0:
+            report.stopped = "site build failed"
             return report
-        report.steps.append("deploy")
+        report.steps.append("site")
+        if deploy:
+            cmd = [tool("npx"), "-y", WRANGLER, "pages", "deploy", "--branch", "main", "--commit-dirty=true"]
+            if run(cmd, CLOUDFLARE) != 0:
+                report.stopped = "deploy failed; posts wait until the site is up"
+                return report
+            report.steps.append("deploy")
+        # With deploy off (the demo, a local check), the local build is what gets published.
+        deployed |= {r["id"] for r in shown}
+        write_state({**read_state(), "deployed": sorted(deployed)})
+
+    # Post only what the deployed site already shows, each ruling once.
+    fresh = [r for r in unposted(con, event["id"]) if r["id"] in deployed] if event else []
     if fresh and post is not None:
         post(message(event["name"], fresh))
         mark(con, [r["id"] for r in fresh], sent=True)
