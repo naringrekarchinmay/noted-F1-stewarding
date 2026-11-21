@@ -39,7 +39,7 @@ Day 6: briefs. The local model writes two or three sentences on what happened an
 
 Day 6: rules. `uv run noted rules` splits the current rulebooks into articles (`pipeline/noted/rules.py`): Sporting Regulations Section B, issue 9 (379 articles), and Appendix L Chapter IV, the code of driving conduct, from the English column of the bilingual PDF. Put the two PDFs in `data/regs/` first; the URLs are in `rules.BOOKS`. The site gets a page per article group under `rules/`, listing the 2026 rulings that cite each article. In a 2026 ruling, an article reference in the Infringement field ("Article B1.8.5", "Appendix L, Chapter IV, Article 2 d)") links to its article, or to the FIA PDF if the rulebook is missing. Earlier seasons cite other rulebooks and are not linked. No redlines.
 
-Day 6: publish (planned, not deployed). `cloudflare/` holds a Pages Function for friends' steward-mode votes (`/api/votes`, D1), its schema and tests, and `DEPLOY.md`, the steps to follow once you have a free Cloudflare account. Build with `uv run noted site --votes` only for that deploy; without the flag, picks stay in each browser's localStorage.
+Day 6: publish. The site is live for friends at https://noted-206.pages.dev, behind Cloudflare Access (allowed emails sign in with a one-time PIN), on the free plans. `cloudflare/` holds the Pages Function for steward-mode votes (`/api/votes`, D1 `noted-votes`), its schema and tests, and `DEPLOY.md` with the update steps. Build with `uv run noted site --votes` for the deploy; without the flag, picks stay in each browser's localStorage.
 
 Close memory-heavy apps before a model run: with swap full the model runs about seven times slower.
 

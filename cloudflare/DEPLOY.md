@@ -1,9 +1,16 @@
 # Deploying Noted with friends' votes
 
-Nothing here is deployed yet. **Until it is, steward-mode picks stay in each browser's
-localStorage only** (key `noted:rulings`); nobody else sees them.
+**Live since 21 November 2026 at https://noted-206.pages.dev, behind Cloudflare Access.**
+The Access application "Noted" covers `noted-206.pages.dev` and `*.noted-206.pages.dev`, and its
+policy "Friends" allows listed emails only (one-time PIN). Add friends under Zero Trust > Access
+controls > Applications > Noted > Policies > Friends. The D1 database `noted-votes` is bound as `DB`.
 
-**None of these steps has been run against Cloudflare.** The Function is tested locally
+To update the site: `uv run noted site --votes` from `pipeline/`, then from `cloudflare/`
+`npx wrangler@4.166.0 pages deploy --branch main --commit-dirty=true`.
+
+The rest of this file is the original plan, kept for a rebuild from scratch.
+
+**First written before any of it had run.** The Function is tested locally
 (`node --test cloudflare/test/votes.test.mjs`, a fake D1, and once against `node:sqlite`), and the
 page's vote sync against a local stand-in. Unverified: the wrangler version pin, the exact flags,
 `pages_build_output_dir` pointing outside this folder (`../data/site`), and the free-tier figures.

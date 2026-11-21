@@ -6,4 +6,4 @@ compatibility_date = "2026-11-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "noted-votes"
-database_id = "REPLACE_AFTER_wrangler_d1_create"
+database_id = "bff74bc3-91e2-4751-9376-4d57d8d57513"
