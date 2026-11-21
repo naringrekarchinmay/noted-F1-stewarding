@@ -498,6 +498,31 @@ def watch(
         lock.close()
 
 
+@app.command("demo-weekend")
+def demo_weekend(
+    event: str = typer.Option("São Paulo", help="Event name, as on the FIA site (substring)."),
+    season: int = typer.Option(2026),
+) -> None:
+    """Replay a past weekend through the watcher, at speed, on a copy in data/demo (no network, no deploy)."""
+    from . import demo
+
+    live = db.data_dir()
+    con = db.connect()
+    row = con.execute("SELECT id, name FROM events WHERE season = ? AND name LIKE ?", (season, f"%{event}%")).fetchone()
+    con.close()
+    if not row:
+        typer.secho(f"No {season} event matching {event!r}.", fg="red")
+        raise typer.Exit(1)
+    out = live / "demo"
+    typer.echo(f"Replaying {row['name']} {season} in {out}")
+    report = demo.run(live, out, row["id"])
+    for b in report["bursts"]:
+        typer.echo(f"  burst {b['n']}: {b['documents']} documents ({b['from']} to {b['to']}), {b['seconds']}s, "
+                   f"posted {b['posted']}{'; ' + b['stopped'] if b['stopped'] else ''}")
+    for key, c in report["comparison"].items():
+        typer.echo(f"  {key}: live {c['live']}, demo {c['demo']}, identical {c['identical']}")
+
+
 @app.command("watch-plist")
 def watch_plist(interval: int = typer.Option(900, min=300, help="Seconds between cycles.")) -> None:
     """Print the launchd job for the watcher. Installing it is a separate, manual step."""

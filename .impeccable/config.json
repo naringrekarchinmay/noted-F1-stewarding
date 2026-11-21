@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "data/demo/**"
+        ],
+        "createdAt": "2026-11-21T20:41:34.748Z",
+        "reason": "Claude, Day 7: data/demo is a generated throwaway copy of the site built by the São Paulo replay demo; the finding is the Day 4 mark.cite inline highlight, specified in DESIGN.md, and the live site keeps being checked"
+      }
+    ]
+  }
+}

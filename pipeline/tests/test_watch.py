@@ -107,3 +107,29 @@ def test_the_launchd_job_uses_absolute_paths_and_a_quarter_hour():
     plist = watch.plist()
     assert "<string>com.noted.watch</string>" in plist and "<integer>900</integer>" in plist
     assert "<string>watch</string>" in plist and "<string>/" in plist
+
+
+def test_demo_bursts_split_where_the_fia_went_quiet():
+    from noted.demo import bursts
+
+    docs = [{"id": 1, "published_at": "2026-11-06T15:00"}, {"id": 2, "published_at": "2026-11-06T16:30"},
+            {"id": 3, "published_at": "2026-11-06T19:00"}, {"id": 4, "published_at": "2026-11-07T14:00"}]
+    assert [[d["id"] for d in b] for b in bursts(docs)] == [[1, 2], [3], [4]]
+
+
+def test_demo_prepare_resets_the_event_in_a_copy_and_leaves_the_live_database_alone(con, tmp_path):
+    from noted.demo import prepare
+
+    live = tmp_path
+    con.execute("UPDATE documents SET pdf_path = 'pdfs/x.pdf'")
+    con.execute("INSERT INTO precedents VALUES (20, 1, 10, 0.5, 'same')")
+    con.commit()
+    docs = prepare(live, tmp_path / "demo", 2)
+    assert [d["id"] for d in docs] == [20] and docs[0]["pdf_path"] == "pdfs/x.pdf"
+    copy = sqlite3.connect(tmp_path / "demo" / "noted.sqlite")
+    assert copy.execute("SELECT COUNT(*) FROM rulings WHERE document_id = 20").fetchone()[0] == 0
+    assert copy.execute("SELECT pdf_path FROM documents WHERE id = 20").fetchone()[0] is None
+    assert copy.execute("SELECT position FROM events WHERE id = 2").fetchone()[0] == -1
+    assert copy.execute("SELECT COUNT(*) FROM rulings WHERE document_id = 10").fetchone()[0] == 1  # other events kept
+    assert con.execute("SELECT COUNT(*) FROM rulings WHERE document_id = 20").fetchone()[0] == 1  # live untouched
+    assert con.execute("SELECT COUNT(*) FROM precedents").fetchone()[0] == 1
