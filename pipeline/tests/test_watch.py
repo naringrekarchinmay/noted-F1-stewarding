@@ -1,0 +1,109 @@
+"""The watcher cycle, with a fake runner, fake model check and fake channel. No network."""
+
+import json
+import sqlite3
+from datetime import datetime, timezone
+
+import pytest
+
+from noted import db, watch
+from noted.watch import cycle, message
+
+SATURDAY = datetime(2026, 11, 21, 18, 0, tzinfo=timezone.utc)
+TUESDAY = datetime(2026, 11, 24, 18, 0, tzinfo=timezone.utc)
+
+
+@pytest.fixture
+def con(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOTED_DATA", str(tmp_path))
+    c = db.connect()
+    c.execute("INSERT INTO events VALUES (1, 2026, 'São Paulo Grand Prix', 1), (2, 2026, 'Las Vegas Grand Prix', 0)")
+    for doc_id, event, title in ((10, 1, "Doc 79 - Infringement - Car 16 - Causing a collision"),
+                                 (20, 2, "Doc 12 - Decision - Car 44 - Unsafe release")):
+        c.execute("INSERT INTO documents (id, event_id, title, url, published_at, kind) VALUES (?, ?, ?, ?, ?, 'decision')",
+                  (doc_id, event, title, f"https://x/{doc_id}.pdf", "2026-11-21T20:00"))
+        c.execute("INSERT INTO rulings VALUES (?, 3, 'ok', '', ?, '[]')", (doc_id, json.dumps({"session": {"text": "Race"}})))
+        c.execute("INSERT INTO extractions (document_id, model, prompt_version, result, created_at) "
+                  "VALUES (?, 'gemma4:e4b', 2, '{}', 'x')", (doc_id,))
+    c.commit()
+    yield c
+    c.close()
+
+
+class Runner:
+    def __init__(self, codes=None):
+        self.calls, self.codes = [], codes or {}
+
+    def __call__(self, cmd, cwd):
+        step = "deploy" if "pages" in cmd else cmd[cmd.index("noted") + 1]
+        self.calls.append(step)
+        return self.codes.get(step, 0)
+
+
+def test_a_full_cycle_runs_every_step_and_posts_only_the_current_events_rulings(con):
+    run, sent = Runner(), []
+    report = cycle(con, SATURDAY, run=run, model_up=lambda: True, post=sent.append)
+    assert run.calls == ["fetch", "parse", "extract", "precedent", "brief", "replay", "site", "deploy"]
+    assert report.posted == 1 and len(sent) == 1
+    assert "Las Vegas Grand Prix" in sent[0] and "/r/20>" in sent[0] and "/r/10" not in sent[0]
+    # a second cycle with nothing new does not rebuild, deploy or post again
+    run2, sent2 = Runner(), []
+    cycle(con, SATURDAY, run=run2, model_up=lambda: True, post=sent2.append)
+    assert "site" not in run2.calls and "deploy" not in run2.calls and sent2 == []
+
+
+def test_the_site_is_built_with_shared_votes():
+    assert watch.noted("site", "--votes")[-2:] == ["site", "--votes"]
+
+
+def test_a_refusal_from_the_fia_site_backs_off(con):
+    run = Runner({"fetch": 2})
+    report = cycle(con, SATURDAY, run=run, model_up=lambda: True, post=None)
+    assert run.calls == ["fetch"] and "backing off" in report.stopped
+    later = Runner()
+    report = cycle(con, SATURDAY.replace(hour=20), run=later, model_up=lambda: True, post=None)
+    assert later.calls == [] and "backing off" in report.stopped
+
+
+def test_without_ollama_nothing_is_deployed_or_posted(con):
+    run, sent = Runner(), []
+    report = cycle(con, SATURDAY, run=run, model_up=lambda: False, post=sent.append)
+    assert run.calls == ["fetch", "parse"] and sent == [] and "Ollama" in report.stopped
+
+
+def test_a_failed_deploy_holds_the_post(con):
+    run, sent = Runner({"deploy": 1}), []
+    report = cycle(con, SATURDAY, run=run, model_up=lambda: True, post=sent.append)
+    assert sent == [] and "deploy failed" in report.stopped
+    assert con.execute("SELECT COUNT(*) FROM posts WHERE sent = 1").fetchone()[0] == 0
+
+
+def test_it_stays_quiet_between_race_weekends_unless_forced(con):
+    run = Runner()
+    assert "not a race weekend" in cycle(con, TUESDAY, run=run, model_up=lambda: True).stopped and run.calls == []
+    cycle(con, TUESDAY, run=run, model_up=lambda: True, force=True)
+    assert run.calls[0] == "fetch"
+
+
+def test_the_message_names_the_incident_and_never_the_decision():
+    text = message("Las Vegas Grand Prix", [
+        {"id": 20, "title": "Doc 12 - Decision - Car 44 - Unsafe release", "fields": json.dumps({"session": {"text": "Race"}})},
+        {"id": 21, "title": "Doc 13 - Infringement - Car 1 - Leaving the track", "fields": "{}"},
+    ], "https://example.pages.dev")
+    assert text.splitlines()[0] == "**Las Vegas Grand Prix**: 2 new rulings. Rule on them before you look."
+    assert "- Race · Doc 12: Unsafe release <https://example.pages.dev/r/20>" in text
+    assert "- Doc 13: Leaving the track <https://example.pages.dev/r/21>" in text
+    for word in ("penalty", "reprimand", "NFA", "seconds", "grid"):
+        assert word.lower() not in text.lower()
+
+
+def test_a_long_message_is_cut_to_discords_limit():
+    many = [{"id": n, "title": f"Doc {n} - Infringement - Car 1 - " + "x" * 80, "fields": "{}"} for n in range(60)]
+    text = message("Las Vegas Grand Prix", many)
+    assert len(text) <= 1900 and text.endswith("…and more on the site.")
+
+
+def test_the_launchd_job_uses_absolute_paths_and_a_quarter_hour():
+    plist = watch.plist()
+    assert "<string>com.noted.watch</string>" in plist and "<integer>900</integer>" in plist
+    assert "<string>watch</string>" in plist and "<string>/" in plist

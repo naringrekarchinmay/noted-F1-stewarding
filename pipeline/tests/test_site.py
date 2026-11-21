@@ -128,3 +128,27 @@ def test_numbered_wraps_numbers_without_breaking_escaped_characters():
 
     assert numbered("McLaren's 4 points & 0.6 km/h") == \
         'McLaren&#x27;s <span class="num">4</span> points &amp; <span class="num">0.6</span> km/h'
+
+
+def test_ledger_counts_rulings_penalties_and_earlier_comparisons_per_season():
+    from noted.precedent import Incident
+    from noted.site import ledger_page
+
+    def inc(n, season, penalties, group="collision"):
+        return Incident(id=n, event_id=1, event="x", season=season, published_at=str(n), title=f"Doc {n} - Infringement",
+                        url="", type=group, group=group, session="race", cars=set(), outcome="penalty" if penalties else
+                        "no_further_action", penalties=penalties, factors=set(), text="", names=set())
+
+    five = [{"kind": "time", "value": 5.0}]
+    items = [inc(n, 2026, five if n % 2 else []) for n in range(1, 9)] + [inc(20, 2019, five), inc(30, 2025, [], "flags")]
+
+    class Index:
+        incidents = items
+        by_id = {i.id: i for i in items}
+
+    data = {"index": Index(), "precedents": {2: [(1, "harsher"), (3, "harsher"), (5, "same")], 4: [(9, "lighter")]}}
+    html = ledger_page(data)
+    assert ">Collision<span class=\"board__count\">8 rulings</span>" in html  # 2019 left out
+    assert '<span class="num ledger__season">2026</span><span class="num r">8</span><span class="num r">50%</span>' in html
+    assert '<b class="num">1</b> same' in html and '▲ <b class="num">2</b>' in html and '▼ <b class="num">0</b>' in html
+    assert "fewer than 8 rulings: Flags" in html

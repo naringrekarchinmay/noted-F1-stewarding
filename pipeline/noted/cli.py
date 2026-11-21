@@ -22,6 +22,7 @@ def fetch(
     listings_only: bool = typer.Option(False, help="Record the listings without downloading."),
     interval: float = typer.Option(5.0, min=2.0, help="Seconds between requests to the FIA site."),
     limit: int = typer.Option(250, min=1, help="Stop after this many requests in one run."),
+    latest: bool = typer.Option(False, help="Only the most recent event (what the watcher polls)."),
 ) -> None:
     """Read a season's listings and download its ruling PDFs.
 
@@ -33,7 +34,7 @@ def fetch(
     root = db.data_dir()
     try:
         kinds = set(RULING_KINDS) if summonses else set(RULING_KINDS) - {"summons"}
-        _fetch(con, site, root, season, event, all_pdfs, listings_only, limit, kinds)
+        _fetch(con, site, root, season, event, all_pdfs, listings_only, limit, kinds, latest)
     except fetching.Blocked as exc:
         con.commit()
         typer.secho(str(exc), fg="red")
@@ -44,12 +45,14 @@ def fetch(
         con.close()
 
 
-def _fetch(con, site, root, season, event, all_pdfs, listings_only, limit, kinds) -> None:
+def _fetch(con, site, root, season, event, all_pdfs, listings_only, limit, kinds, latest=False) -> None:
     events = fetching.list_events(site, season)
     if not events:
         typer.secho(f"No events found for {season}. The page layout may have changed.", fg="red")
         raise typer.Exit(1)
     wanted = [e for e in events if event.casefold() in e.name.casefold()]
+    if latest:
+        wanted = sorted(events, key=lambda e: e.position)[:1]
     typer.echo(f"{season}: {len(events)} events listed, {len(wanted)} selected")
     for ev in wanted:
         con.execute(
@@ -450,15 +453,57 @@ def rules_cmd() -> None:
 
 
 @app.command()
-def replay(limit: int = typer.Option(0, min=0, help="Stop after trying this many rulings; 0 for all.")) -> None:
+def replay(
+    limit: int = typer.Option(0, min=0, help="Stop after trying this many rulings; 0 for all."),
+    only: str = typer.Option("", help="Only these document ids, comma-separated (the watcher's new rulings)."),
+) -> None:
     """Fetch car positions from OpenF1 for on-track incidents since 2023 (data/replays)."""
     from . import replay as rp
 
     con = db.connect()
     try:
-        rp.run(con, limit=limit or None)
+        rp.run(con, limit=limit or None, only={int(x) for x in only.split(",") if x.strip()} or None)
     finally:
         con.close()
+
+
+@app.command()
+def watch(
+    force: bool = typer.Option(False, help="Run even on a weekday without races, and rebuild even with nothing new."),
+    deploy: bool = typer.Option(True, "--deploy/--no-deploy", help="Deploy the rebuilt site to Cloudflare Pages."),
+    post_new: bool = typer.Option(True, "--post/--no-post", help="Post new rulings to Discord."),
+) -> None:
+    """One race-weekend cycle: fetch the latest event, process, deploy, post new rulings to Discord."""
+    from datetime import datetime as dt
+
+    from . import watch as w
+
+    try:
+        lock = w.locked()
+    except w.Locked as exc:
+        typer.echo(str(exc))
+        return
+    con = db.connect()
+    try:
+        url = w.webhook_path().read_text().strip() if w.webhook_path().exists() else ""
+        post = (lambda text: w.post_discord(text, url)) if post_new and url else None
+        now = dt.now(timezone.utc)
+        typer.echo(f"--- watch {now.astimezone().isoformat(timespec='minutes')}")
+        report = w.cycle(con, now, post=post, force=force, deploy=deploy)
+        typer.echo(str(report))
+        if post_new and not url:
+            typer.echo(f"No Discord webhook: put its URL in {w.webhook_path()} to post.")
+    finally:
+        con.close()
+        lock.close()
+
+
+@app.command("watch-plist")
+def watch_plist(interval: int = typer.Option(900, min=300, help="Seconds between cycles.")) -> None:
+    """Print the launchd job for the watcher. Installing it is a separate, manual step."""
+    from . import watch as w
+
+    typer.echo(w.plist(interval), nl=False)
 
 
 @app.command()

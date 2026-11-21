@@ -406,7 +406,7 @@ def _write(path: Path, data) -> None:
     partial.replace(path)
 
 
-def run(con, limit: int | None = None) -> None:
+def run(con, limit: int | None = None, only: set[int] | None = None) -> None:
     """Write data/replays/{document_id}.json for each eligible ruling not done yet.
 
     `limit` caps how many rulings are attempted in this run (files already written don't count).
@@ -418,7 +418,7 @@ def run(con, limit: int | None = None) -> None:
         "WHERE e.season >= 2023 ORDER BY e.season, d.id",
         (MODEL, PROMPT_VERSION),
     ).fetchall()
-    rulings = [r for r in map(ruling_from_row, rows) if r.type in TYPES]
+    rulings = [r for r in map(ruling_from_row, rows) if r.type in TYPES and (only is None or r.document_id in only)]
     api = _api()
     attempted = written = 0
     try:

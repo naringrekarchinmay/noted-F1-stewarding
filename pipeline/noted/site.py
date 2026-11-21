@@ -12,7 +12,7 @@ import hashlib
 import json
 import re
 import shutil
-from collections import defaultdict
+from collections import Counter, defaultdict
 from html import escape
 from pathlib import Path
 
@@ -213,7 +213,8 @@ def index_page(data: dict) -> str:
              '<p class="lede">Every ruling quoted from the FIA document, with the earlier rulings most like it and whether they were punished the same.</p>',
              '<p class="record" data-record hidden></p>']
     if data.get("books"):
-        parts.insert(2, '<p class="lede"><a href="rules/index.html">The 2026 rules</a>, article by article, with the rulings that cite each one.</p>')
+        parts.insert(2, '<p class="lede"><a href="rules/index.html">The 2026 rules</a>, article by article, with the rulings that cite each one. '
+                        'The <a href="ledger.html">consistency ledger</a>: each kind of incident, season by season.</p>')
     for season in sorted(by_season, reverse=True):
         events = sorted(by_season[season], key=lambda e: e["position"])
         rows = []
@@ -461,6 +462,75 @@ def ruling_page(i: Incident, data: dict, replay: dict | None) -> str:
     return page(f"{subject(i.title)} – {name} {event['season']}", body, 1, crumbs)
 
 
+# ---------------------------------------------------------------- the consistency ledger
+
+LEDGER_SEASONS = (2023, 2024, 2025, 2026)  # 2019 and 2021 have one event each in the archive
+GROUP_LABELS = {
+    "sc2_sc1_time": "SC2–SC1 times in qualifying",
+    "leaving_track_advantage": "Leaving the track and gaining an advantage",
+    "forcing_off": "Forcing another car off",
+    "unsafe_rejoin": "Unsafe rejoin",
+    "erratic_driving": "Erratic or slow driving",
+    "unsafe_release": "Unsafe release",
+    "pit_lane_speeding": "Pit lane speeding",
+    "pit_lane_procedure": "Pit lane procedure",
+    "safety_car": "Safety car rules",
+    "start_procedure": "Start procedure",
+    "race_director_instruction": "Race director’s instructions",
+    "unsafe_car": "Unsafe car",
+    "power_unit": "Power unit elements",
+    "parc_ferme": "Parc fermé",
+}
+
+
+def group_label(group: str | None) -> str:
+    return GROUP_LABELS.get(group or "", (group or "other").replace("_", " ").capitalize())
+
+
+def ledger_page(data: dict) -> str:
+    """Per incident type and season: how many rulings, how often a penalty, the usual one, and how the
+    three closest earlier rulings were punished. Everything here is counted; nothing is judged."""
+    by_group: dict[str, list[Incident]] = defaultdict(list)
+    for i in data["index"].incidents:
+        if i.season in LEDGER_SEASONS:
+            by_group[i.group or "other"].append(i)
+    head = ('<li class="ledger__row ledger__row--head" aria-hidden="true"><span>season</span><span class="r">rulings</span>'
+            '<span class="r">penalised</span><span>usually</span><span class="ledger__cmp">earlier: same · ▲ harsher · ▼ lighter</span></li>')
+    sections, small = [], []
+    for group, items in sorted(by_group.items(), key=lambda kv: -len(kv[1])):
+        if len(items) < 8:
+            small.append(group)
+            continue
+        rows = []
+        for season in sorted(LEDGER_SEASONS, reverse=True):
+            here = [i for i in items if i.season == season]
+            if not here:
+                continue
+            penalised = sum(main_penalty(i)[0] != "none" for i in here)
+            usual_text, _ = Counter(verdict(i)[0] for i in here).most_common(1)[0]
+            usual = next(i for i in here if verdict(i)[0] == usual_text)
+            cmps = Counter(cmp for i in here for p, cmp in data["precedents"].get(i.id, [])[:3] if p in data["index"].by_id)
+            rows.append(
+                f'<li class="ledger__row"><span class="num ledger__season">{season}</span>'
+                f'<span class="num r">{len(here)}</span><span class="num r">{round(100 * penalised / len(here))}%</span>'
+                f'<span class="ledger__usual">{stamp(usual)}</span>'
+                f'<span class="ledger__cmp"><span class="cmp cmp--same"><b class="num">{cmps["same"]}</b> same</span>'
+                f'<span class="cmp cmp--harsher">▲ <b class="num">{cmps["harsher"]}</b></span>'
+                f'<span class="cmp cmp--lighter">▼ <b class="num">{cmps["lighter"]}</b></span></span></li>')
+        sections.append(f'<section class="season"><h2 class="board__head">{escape(group_label(group))}'
+                        f'<span class="board__count">{len(items)} rulings</span></h2>'
+                        f'<ol class="events ledger">{head}{"".join(rows)}</ol></section>')
+    note = (f'<p class="lede">Left out for having fewer than 8 rulings: {escape(", ".join(group_label(g) for g in small))}.</p>'
+            if small else "")
+    body = ('<h1 class="title">Consistency ledger</h1>'
+            '<p class="lede">For each kind of incident and each season: how many rulings, how many ended in a penalty, '
+            'the most common decision, and how the three closest earlier rulings for each one were punished: '
+            'the same, harsher (▲) or lighter (▼) than it. Incident types and precedents are matched automatically. '
+            '2019 and 2021 are left out: the archive has one race from each.</p>'
+            + "".join(sections) + note)
+    return page("Consistency ledger", body, 0)
+
+
 def cited_list(incidents: list[Incident], data: dict, up: str, level: int = 3) -> str:
     if not incidents:
         return ""
@@ -560,6 +630,7 @@ def build(out: Path | None = None, votes: str = "") -> Path:
     (out / "r").mkdir()
     shutil.copytree(ASSETS, out / "assets")
     (out / "index.html").write_text(index_page(data))
+    (out / "ledger.html").write_text(ledger_page(data))
     for path, html in rules_pages(data).items():
         (out / path).parent.mkdir(parents=True, exist_ok=True)
         (out / path).write_text(html)

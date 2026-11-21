@@ -577,3 +577,31 @@ html:not(.js) .steward, html:not(.js) .replay { display: none; }
 .cited__where { grid-area: where; color: var(--mute); font-size: 12.5px; }
 .cited__subject { grid-area: subj; font-weight: 600; font-size: 14px; line-height: 1.3; }
 .cited__row .stamp { grid-area: stamp; }
+
+/* ------------------------------------------------------------ the consistency ledger */
+
+.ledger__row {
+  display: grid;
+  grid-template-columns: 52px 64px 80px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  min-height: 48px;
+  padding: 8px 12px;
+  background: var(--sheet);
+  color: var(--ink);
+}
+.ledger__row .r { text-align: right; }
+.ledger__row .num { font-size: 14px; }
+.ledger__season { color: var(--mute); }
+.ledger__usual .stamp { justify-self: start; }
+.ledger__cmp { display: flex; gap: 12px; justify-content: flex-end; white-space: nowrap; }
+.ledger__cmp .cmp { font-size: 13px; }
+.ledger__cmp b { font-weight: 600; }
+.ledger__row--head { min-height: 0; padding: 0 12px 6px; background: none; color: var(--rule); font-size: 12px; }
+.ledger__row--head .ledger__cmp { font-size: 12px; }
+
+@media (max-width: 560px) {
+  .ledger__row { grid-template-columns: 44px 48px 64px minmax(0, 1fr); row-gap: 6px; column-gap: 8px; padding: 8px 10px; }
+  .ledger__cmp { grid-column: 1 / -1; justify-content: flex-start; }
+  .ledger__row--head .ledger__cmp { display: none; }
+}

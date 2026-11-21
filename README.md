@@ -26,6 +26,7 @@ uv run noted precedent --challenge                 # closest earlier rulings; th
 uv run noted replay                                # car positions from OpenF1 around each incident, cached
 uv run noted brief                                 # plain-English brief per ruling, linted against the source (about 1.5 h)
 uv run noted rules                                 # rulebooks in data/regs split into articles
+uv run noted watch                                 # one race-weekend cycle: fetch, process, deploy, post
 uv run noted site                                  # static site in data/site
 python3 -m http.server 4174 --directory ../data/site
 uv run pytest
@@ -40,6 +41,8 @@ Day 6: briefs. The local model writes two or three sentences on what happened an
 Day 6: rules. `uv run noted rules` splits the current rulebooks into articles (`pipeline/noted/rules.py`): Sporting Regulations Section B, issue 9 (379 articles), and Appendix L Chapter IV, the code of driving conduct, from the English column of the bilingual PDF. Put the two PDFs in `data/regs/` first; the URLs are in `rules.BOOKS`. The site gets a page per article group under `rules/`, listing the 2026 rulings that cite each article. In a 2026 ruling, an article reference in the Infringement field ("Article B1.8.5", "Appendix L, Chapter IV, Article 2 d)") links to its article, or to the FIA PDF if the rulebook is missing. Earlier seasons cite other rulebooks and are not linked. No redlines.
 
 Day 6: publish. The site is live for friends at https://noted-206.pages.dev, behind Cloudflare Access (allowed emails sign in with a one-time PIN), on the free plans. `cloudflare/` holds the Pages Function for steward-mode votes (`/api/votes`, D1 `noted-votes`), its schema and tests, and `DEPLOY.md` with the update steps. Build with `uv run noted site --votes` for the deploy; without the flag, picks stay in each browser's localStorage.
+
+Day 7: race weekends. `uv run noted watch` runs one cycle: fetch the latest event, parse, extract, precedent (with the model check), brief, replays for the new rulings, `site --votes`, deploy, then a Discord post naming each new ruling and its link (never the decision). It backs off for six hours if the FIA site refuses, waits for the next cycle if Ollama is down, posts each ruling once, and runs Thursday to Monday only unless `--force`. Put the Discord webhook URL in `data/discord-webhook.txt`. `uv run noted watch-plist` prints the launchd job (every 15 minutes). The site has a consistency ledger (`ledger.html`): for each kind of incident and season, the rulings, the share penalised, the usual decision and how the three closest earlier rulings were punished.
 
 Close memory-heavy apps before a model run: with swap full the model runs about seven times slower.
 
