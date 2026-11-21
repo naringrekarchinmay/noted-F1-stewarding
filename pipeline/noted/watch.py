@@ -222,7 +222,8 @@ def cycle(con, now: datetime, *, run: Runner = run_command, model_up: Callable[[
     if not model_up():
         report.stopped = "Ollama is not answering; the model steps wait for the next cycle"
         return report
-    for step in (("extract",), ("precedent", "--challenge"), ("brief",)):
+    current = ("--season", str(season))  # the backfill of older seasons runs separately
+    for step in (("extract", *current), ("precedent", "--challenge", *current), ("brief", *current)):
         if run(noted(*step), PIPELINE) != 0:
             report.stopped = f"{step[0]} failed"
             return report
@@ -266,11 +267,12 @@ class Locked(RuntimeError):
     pass
 
 
-def locked():
-    """An exclusive lock on data/watch.lock, so a manual run and the scheduled one never overlap."""
+def locked(wait: bool = False):
+    """An exclusive lock on data/watch.lock, so a manual run, the scheduled one and the backfill's
+    site build never overlap. wait=True blocks until the lock is free."""
     handle = open(db.data_dir() / "watch.lock", "w")
     try:
-        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(handle, fcntl.LOCK_EX | (0 if wait else fcntl.LOCK_NB))
     except BlockingIOError as exc:
         handle.close()
         raise Locked("another watcher cycle is running") from exc
@@ -312,3 +314,40 @@ def plist(interval: int = 900) -> str:
 </dict>
 </plist>
 """
+
+
+# ---------------------------------------------------------------- backfill
+
+
+def backfill(seasons: list[int], now: datetime, run: Runner = run_command, deploy: bool = True) -> list[str]:
+    """Older seasons, start to finish. Each step skips work already done, so a stopped run resumes.
+    The model steps are limited to these seasons, except the precedent check, which also covers the
+    later rulings that now have these as candidate precedents. The final build takes the watcher's lock."""
+    done: list[str] = []
+    for season in seasons:
+        code = run(noted("fetch", "--season", str(season), "--limit", "1000", "--interval", "5"), PIPELINE)
+        if code == 2:
+            write_state({**read_state(), "blocked_until": (now + BACKOFF).isoformat(timespec="seconds")})
+            done.append(f"fetch {season}: the FIA site refused; stopped")
+            return done
+        done.append(f"fetch {season}" + ("" if code == 0 else f" (exit {code})"))
+        run(noted("parse", "--season", str(season)), PIPELINE)
+        done.append(f"parse {season}")
+    only = [x for s in seasons for x in ("--season", str(s))]
+    for step in (("extract", *only), ("precedent", "--challenge"), ("brief", *only)):
+        if run(noted(*step), PIPELINE) != 0:
+            done.append(f"{step[0]} failed; run again to resume")
+            return done
+        done.append(step[0])
+    lock = locked(wait=True)
+    try:
+        if run(noted("site", "--votes"), PIPELINE) != 0:
+            done.append("site failed")
+            return done
+        done.append("site")
+        if deploy:
+            cmd = [tool("npx"), "-y", WRANGLER, "pages", "deploy", "--branch", "main", "--commit-dirty=true"]
+            done.append("deploy" if run(cmd, CLOUDFLARE) == 0 else "deploy failed")
+    finally:
+        lock.close()
+    return done

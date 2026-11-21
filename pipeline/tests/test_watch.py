@@ -151,3 +151,31 @@ def test_with_deploy_off_the_local_build_counts_as_published(con):
     sent = []
     report = cycle(con, SATURDAY, run=Runner(), model_up=lambda: True, post=sent.append, deploy=False)
     assert report.posted == 1 and "deploy" not in report.steps
+
+
+def test_backfill_runs_old_seasons_and_stops_on_a_refusal(con):
+    from noted.watch import backfill
+
+    calls = []
+
+    def run(cmd, cwd):
+        calls.append(" ".join(cmd[cmd.index("noted") + 1:]) if "noted" in cmd else "deploy")
+        return 2 if "--season 2020" in calls[-1] and calls[-1].startswith("fetch") else 0
+
+    steps = backfill([2022, 2021], SATURDAY, run=run)
+    assert steps[-2:] == ["site", "deploy"]
+    assert "extract --season 2022 --season 2021" in calls and "precedent --challenge" in calls
+    assert "brief --season 2022 --season 2021" in calls
+    calls.clear()
+    steps = backfill([2020, 2019], SATURDAY, run=run)
+    assert steps[-1] == "fetch 2020: the FIA site refused; stopped" and len(calls) == 1
+    assert watch.blocked_until(watch.read_state()) is not None
+
+
+def test_the_watcher_only_processes_the_current_season(con):
+    run = Runner()
+    calls = []
+    run_with_args = lambda cmd, cwd: calls.append(cmd[cmd.index("noted") + 1:]) or 0  # noqa: E731
+    cycle(con, SATURDAY, run=run_with_args, model_up=lambda: True, post=None, deploy=False)
+    model_steps = [c for c in calls if c[0] in ("extract", "precedent", "brief")]
+    assert all(c[-2:] == ["--season", "2026"] for c in model_steps) and len(model_steps) == 3

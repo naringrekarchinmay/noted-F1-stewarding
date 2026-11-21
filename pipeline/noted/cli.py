@@ -172,6 +172,7 @@ def extract(
     which: str = typer.Option("all", "--set", help="gold, tune or all."),
     only: list[int] = typer.Option([], help="Only these document ids."),
     force: bool = typer.Option(False, help="Redo rulings already extracted by this model and prompt."),
+    season: list[int] = typer.Option([], help="Only these seasons (the watcher passes the current one)."),
 ) -> None:
     """Run the extraction step and store verified results."""
     import httpx
@@ -183,6 +184,11 @@ def extract(
     rows = _ruling_rows(con, which)
     if only:
         rows = [r for r in rows if r["id"] in set(only)]
+    if season:
+        keep = {r[0] for r in con.execute(
+            "SELECT d.id FROM documents d JOIN events e ON e.id = d.event_id WHERE e.season IN (%s)"
+            % ",".join("?" * len(season)), season)}
+        rows = [r for r in rows if r["id"] in keep]
     version = 0 if model == "rules" else ex.PROMPT_VERSION
     done = {
         r[0] for r in con.execute(
@@ -289,6 +295,7 @@ def score(
 def precedent(
     top: int = typer.Option(5, min=1, help="Precedents to keep per ruling."),
     challenge: bool = typer.Option(False, help="Have the local model re-rank on-track incidents (slow; resumable)."),
+    season: list[int] = typer.Option([], help="Only challenge these seasons' rulings; the table is still rebuilt for all."),
 ) -> None:
     """Rank earlier rulings on the same kind of incident and compare their penalties.
 
@@ -310,7 +317,7 @@ def precedent(
         for r in con.execute("SELECT document_id, precedent_id, score FROM challenges WHERE model = ?", (prec.MODEL,))
     }
     client = httpx.Client(timeout=600) if challenge else None
-    todo = [q for q in index.incidents if q.group in prec.ON_TRACK]
+    todo = [q for q in index.incidents if q.group in prec.ON_TRACK and (not season or q.season in season)]
     if challenge:
         typer.echo(f"Challenging the top {prec.CHALLENGE_POOL} for {len(todo)} on-track rulings")
         try:
@@ -360,6 +367,7 @@ def brief(
     limit: int = typer.Option(0, min=0, help="Stop after writing this many briefs; 0 for all."),
     only: list[int] = typer.Option([], help="Only these document ids."),
     force: bool = typer.Option(False, help="Rewrite briefs that are already cached for the same input."),
+    season: list[int] = typer.Option([], help="Only these seasons (the watcher passes the current one)."),
 ) -> None:
     """Write each ruling's plain-English brief with the local model, lint it, and cache it.
 
@@ -374,12 +382,14 @@ def brief(
 
     con = db.connect()
     rows = con.execute(
-        "SELECT d.id, d.title, r.text, r.fields, x.result FROM extractions x "
+        "SELECT d.id, d.title, r.text, r.fields, x.result, e.season FROM extractions x "
         "JOIN documents d ON d.id = x.document_id JOIN events e ON e.id = d.event_id "
         "JOIN rulings r ON r.document_id = d.id WHERE x.model = ? AND x.prompt_version = ? "
         "ORDER BY e.season DESC, e.position, d.id",
         (explain.MODEL, PROMPT_VERSION),
     ).fetchall()
+    if season:
+        rows = [r for r in rows if r["season"] in set(season)]
     if only:
         rows = [r for r in rows if r["id"] in set(only)]
     cached = {
@@ -521,6 +531,23 @@ def demo_weekend(
                    f"posted {b['posted']}{'; ' + b['stopped'] if b['stopped'] else ''}")
     for key, c in report["comparison"].items():
         typer.echo(f"  {key}: live {c['live']}, demo {c['demo']}, identical {c['identical']}")
+
+
+@app.command()
+def backfill(
+    seasons: str = typer.Option("2022,2021,2020,2019", help="Seasons, comma-separated, newest first."),
+    deploy: bool = typer.Option(True, "--deploy/--no-deploy"),
+) -> None:
+    """Download, process and publish older seasons (resumable; hours of model time)."""
+    from datetime import datetime as dt
+
+    from . import watch as w
+
+    if (until := w.blocked_until(w.read_state())) and dt.now(timezone.utc) < until:
+        typer.echo(f"Backing off after the FIA site refused, until {until}.")
+        raise typer.Exit(2)
+    steps = w.backfill([int(x) for x in seasons.split(",") if x.strip()], dt.now(timezone.utc), deploy=deploy)
+    typer.echo("backfill: " + ", ".join(steps))
 
 
 @app.command("watch-plist")
